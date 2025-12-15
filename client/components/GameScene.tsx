@@ -278,6 +278,7 @@ export const GameScene: React.FC<GameSceneProps> = ({
   winningCells,
 }) => {
   const dragStart = useRef({ x: 0, y: 0 });
+  const controlsRef = useRef<any>(null); // Ref to access OrbitControls
 
   const handlePointerInteraction = (e: any) => {
     e.stopPropagation();
@@ -306,6 +307,66 @@ export const GameScene: React.FC<GameSceneProps> = ({
     }
   };
 
+  useFrame((state, delta) => {
+    if (!controlsRef.current) return;
+
+    // Calculate target center based on blocks
+    let targetX = 0;
+    let targetY = 2; // Default vertical center
+
+    if (blocks.length > 0) {
+      let minX = Infinity,
+        maxX = -Infinity,
+        minY = Infinity,
+        maxY = -Infinity;
+      for (const b of blocks) {
+        const x1 = b.x;
+        const x2 = b.orientation === "horizontal" ? b.x + 1 : b.x;
+        const y1 = b.y;
+        const y2 = b.orientation === "vertical" ? b.y + 1 : b.y;
+
+        if (x1 < minX) minX = x1;
+        if (x2 > maxX) maxX = x2;
+        if (y1 < minY) minY = y1;
+        if (y2 > maxY) maxY = y2;
+      }
+
+      // Geometric Center X
+      targetX = ((minX + maxX) / 2) * CUBE_SIZE + CUBE_SIZE * 0.25; // Minor adjustment for improved centering feeling
+
+      // Center Y - We calculate the visual center of the structure
+      const structureCenterY = ((minY + maxY) / 2) * CUBE_SIZE;
+      // We want to look slightly above the center usually, but stay grounded
+      targetY = Math.max(1.5, structureCenterY + 1.0);
+    }
+
+    const damping = 3.0 * delta;
+
+    const currentTarget = controlsRef.current.target;
+    const cameraPos = state.camera.position;
+
+    // Pan X
+    const newTx = THREE.MathUtils.lerp(currentTarget.x, targetX, damping);
+    const dx = newTx - currentTarget.x;
+    currentTarget.x = newTx;
+    cameraPos.x += dx;
+
+    // Pan Y
+    // Clamp Y target to avoid going underground or too high skyward
+    const clampedTargetY = Math.max(0, Math.min(targetY, 12));
+    const newTy = THREE.MathUtils.lerp(
+      currentTarget.y,
+      clampedTargetY,
+      damping
+    );
+    const dy = newTy - currentTarget.y;
+    currentTarget.y = newTy;
+    cameraPos.y += dy;
+
+    // Since we manually modified camera and target, OrbitControls needs to know?
+    // Actually Drei OrbitControls updates on frame, but modifying target directly is standard.
+  });
+
   return (
     <>
       <ambientLight intensity={0.6} />
@@ -318,10 +379,11 @@ export const GameScene: React.FC<GameSceneProps> = ({
       <Environment preset="city" />
 
       <OrbitControls
+        ref={controlsRef}
         minPolarAngle={0}
         maxPolarAngle={Math.PI / 2 - 0.1}
         enablePan={true}
-        target={[0, 4, 0]} // Center camera slightly higher
+        target={[0, 4, 0]} // Initial target
         maxDistance={40}
         minDistance={5}
       />
