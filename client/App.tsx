@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Canvas } from "@react-three/fiber";
 import { io, Socket } from "socket.io-client";
-import { GameScene } from "./components/GameScene";
+import { GameScene } from "@/components/GameScene";
 import {
   createEmptyGrid,
   findDropPosition,
   validateMove,
   applyBlockToGrid,
   checkWin,
-} from "./utils/gameLogic";
+  rebuildGridFromBlocks,
+} from "@/utils/gameLogic";
 import {
   GridState,
   BlockData,
@@ -17,18 +18,15 @@ import {
   GameMode,
   NetworkRole,
   NetworkMessage,
-} from "./types";
+} from "@/types";
 import {
   INITIAL_CAMERA_POSITION,
-  GRID_SIZE,
   INITIAL_TIME_SECONDS,
   INCREMENT_SECONDS,
-} from "./constants";
+} from "@/constants";
 
-// Simple ID generator for blocks
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
-// Helper to format seconds into MM:SS
 const formatTime = (seconds: number) => {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
@@ -40,6 +38,7 @@ const SERVER_URL =
 
 function App() {
   // --- Game State ---
+  // grid is now a Map<string, CellData>
   const [grid, setGrid] = useState<GridState>(createEmptyGrid());
   const [blocks, setBlocks] = useState<BlockData[]>([]);
   const [currentPlayer, setCurrentPlayer] = useState<Player>("white");
@@ -67,10 +66,8 @@ function App() {
   const [isInLobby, setIsInLobby] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Network Refs
   const socketRef = useRef<Socket | null>(null);
 
-  // Keep track of current player in ref for the timer interval
   const currentPlayerRef = useRef<Player>(currentPlayer);
   useEffect(() => {
     currentPlayerRef.current = currentPlayer;
@@ -79,10 +76,6 @@ function App() {
   // --- Timer Interval ---
   useEffect(() => {
     if (winner || isInLobby) return;
-
-    // In online mode, we trust the sync messages, but run local timer for smoothness.
-    // However, to prevent desync, we might want to only tick if we haven't received a move recently.
-    // For simplicity, we tick and then snap to server time on moves.
     const interval = setInterval(() => {
       const active = currentPlayerRef.current;
       if (active === "white") {
@@ -108,8 +101,6 @@ function App() {
   }, [winner, isInLobby]);
 
   // --- Network Logic ---
-
-  // Initialize Socket on mount (or on demand)
   useEffect(() => {
     return () => {
       if (socketRef.current) {
@@ -129,8 +120,6 @@ function App() {
 
     socket.on("connect", () => {
       console.log("Connected to server", socket.id);
-      // Status remains 'connecting' until we actually create or join a room usually,
-      // but for UI feedback we can say we are connected to server.
     });
 
     socket.on("connect_error", (err) => {
@@ -152,14 +141,10 @@ function App() {
       console.log("Game Started!");
       setConnectionStatus("connected");
       setIsInLobby(false);
-
-      // If I am not the host (white), I must be black
       if (socket.id === blackId) {
         setNetworkRole("client");
         setMyPlayer("black");
       }
-
-      // Reset game state
       internalReset();
     });
 
@@ -195,7 +180,6 @@ function App() {
     const socket = connectSocket();
     if (socket) {
       setRoomId(inputRoomId);
-      // Allow a small delay for connection if needed, though usually socket.emit queues events
       socket.emit("join_room", inputRoomId);
     }
   };
@@ -220,18 +204,20 @@ function App() {
   const handleNetworkAction = (data: any) => {
     if (data.type === "MOVE") {
       const { block, nextPlayer, wTime, bTime } = data;
-      setBlocks((prev) => [...prev, block]);
-      setGrid((prev) => {
-        const newGrid = applyBlockToGrid(prev, block);
+      setBlocks((prev) => {
+        const newBlocks = [...prev, block];
+        // Rebuild grid fully from blocks to ensure sync and consistency with Map state
+        const newGrid = rebuildGridFromBlocks(newBlocks);
 
-        // Check win condition with the updated grid
+        // Check win
         const win = checkWin(newGrid, block.player);
         if (win) {
           setWinner(block.player);
           setWinningCells(win);
         }
 
-        return newGrid;
+        setGrid(newGrid); // Sync grid state
+        return newBlocks;
       });
       setCurrentPlayer(nextPlayer);
       setWhiteTime(wTime);
@@ -246,17 +232,11 @@ function App() {
   const getGhost = useCallback(() => {
     if (hoverX === null || winner) return null;
 
-    // Network Constraint
     if (gameMode === "online" && currentPlayer !== myPlayer) return null;
 
-    // Clamp X based on orientation
-    let validX = hoverX;
-    if (validX < 0) validX = 0;
-    if (orientation === "horizontal") {
-      if (validX > GRID_SIZE - 2) validX = GRID_SIZE - 2;
-    } else {
-      if (validX > GRID_SIZE - 1) validX = GRID_SIZE - 1;
-    }
+    // No clamping needed now, board is infinite.
+    // Just use hoverX directly.
+    const validX = hoverX;
 
     const targetY = findDropPosition(grid, validX, orientation);
     const isValid = validateMove(
@@ -269,7 +249,7 @@ function App() {
 
     return {
       x: validX,
-      y: targetY, // can be -1 if full
+      y: targetY, // can be -1 if invalid
       orientation,
       isValid: targetY !== -1 && isValid,
     };
@@ -320,7 +300,6 @@ function App() {
       setCurrentPlayer(nextPlayer);
     }
 
-    // Network Send
     if (gameMode === "online") {
       sendNetworkAction({
         type: "MOVE",
@@ -361,7 +340,6 @@ function App() {
     }
   };
 
-  // Keyboard controls
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isInLobby) return;
@@ -382,7 +360,7 @@ function App() {
     return () => window.removeEventListener("contextmenu", handleContextMenu);
   }, [handleRotate]);
 
-  // --- Render Lobby ---
+  // --- Render Lobby (UNCHANGED) ---
   if (isInLobby) {
     return (
       <div className="w-full h-screen bg-gray-900 flex items-center justify-center p-4">
@@ -508,8 +486,6 @@ function App() {
     );
   }
 
-  // --- Main Game Render ---
-
   return (
     <div className="relative w-full h-screen bg-gray-900 font-sans select-none overflow-hidden touch-none">
       <Canvas
@@ -531,7 +507,6 @@ function App() {
       {/* Top HUD with Timers */}
       <div className="absolute top-0 left-0 w-full p-4 pointer-events-none z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="bg-black/80 backdrop-blur-md px-6 py-3 rounded-xl text-white shadow-xl border border-white/10 flex items-center gap-6 md:gap-8 min-w-[300px] justify-between">
-          {/* White Timer */}
           <div
             className={`flex items-center gap-3 transition-opacity duration-300 ${
               currentPlayer === "white" && !winner
@@ -576,7 +551,6 @@ function App() {
             )}
           </div>
 
-          {/* Black Timer */}
           <div
             className={`flex items-center gap-3 transition-opacity duration-300 ${
               currentPlayer === "black" && !winner
@@ -635,7 +609,6 @@ function App() {
         </div>
       </div>
 
-      {/* Non-blocking Winner Notification */}
       {winner && (
         <div className="absolute top-28 left-1/2 transform -translate-x-1/2 pointer-events-none z-20 animate-in fade-in zoom-in duration-500">
           <div className="bg-gradient-to-br from-green-500/90 to-emerald-600/90 backdrop-blur-md px-10 py-6 rounded-2xl shadow-2xl border-2 border-green-300/50 flex flex-col items-center">
@@ -654,9 +627,7 @@ function App() {
         </div>
       )}
 
-      {/* Bottom Controls */}
       <div className="absolute bottom-0 left-0 w-full p-4 pointer-events-none z-10 flex flex-col items-center gap-4 pb-8 md:pb-4">
-        {/* Helper Text */}
         {!winner && (
           <div className="hidden md:block text-white/50 text-xs bg-black/40 px-3 py-1 rounded backdrop-blur-sm">
             {gameMode === "online" && currentPlayer !== myPlayer ? (
@@ -669,7 +640,6 @@ function App() {
           </div>
         )}
 
-        {/* Action Buttons */}
         <div className="pointer-events-auto w-full max-w-lg flex items-center justify-between gap-4">
           {!winner ? (
             <>
@@ -736,7 +706,6 @@ function App() {
               onClick={() => {
                 if (gameMode === "local") handleReset();
                 else {
-                  // Online rematch logic could go here, but for now just reset local to lobby
                   cancelHosting();
                   setIsInLobby(true);
                 }

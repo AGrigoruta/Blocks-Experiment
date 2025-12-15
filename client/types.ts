@@ -1,6 +1,6 @@
-export type Player = 'white' | 'black';
+export type Player = "white" | "black";
 
-export type Orientation = 'horizontal' | 'vertical';
+export type Orientation = "horizontal" | "vertical";
 
 export interface BlockData {
   id: string;
@@ -17,12 +17,14 @@ export interface CellData {
   player: Player;
   orientation: Orientation;
   // A unique ID to identify if two cells belong to the same block
-  blockId: string; 
+  blockId: string;
   // Helps identify which part of the block this is (e.g. for horizontal: 'left' | 'right', vertical: 'bottom' | 'top')
-  part: 'origin' | 'extension'; 
+  part: "origin" | "extension";
 }
 
-export type GridState = (CellData | null)[][]; // 9x9 grid
+// Changed from 2D array to Map to support infinite/dynamic grid
+// Key format: "x,y"
+export type GridState = Map<string, CellData>;
 
 export interface GameState {
   grid: GridState;
@@ -34,11 +36,38 @@ export interface GameState {
 
 // --- Network Types ---
 
-export type GameMode = 'local' | 'online';
-export type NetworkRole = 'host' | 'client' | null;
+export type GameMode = "local" | "online";
+export type NetworkRole = "host" | "client" | null;
 
-export type NetworkMessage = 
-  | { type: 'SYNC_STATE'; grid: GridState; blocks: BlockData[]; currentPlayer: Player; whiteTime: number; blackTime: number }
-  | { type: 'MOVE'; block: BlockData; nextPlayer: Player; whiteTime: number; blackTime: number }
-  | { type: 'RESET' }
-  | { type: 'OPPONENT_RESIGNED' };
+// SYNC_STATE only sends blocks now; clients reconstruct the grid.
+export type NetworkMessage =
+  | {
+      type: "SYNC_STATE";
+      blocks: BlockData[];
+      currentPlayer: Player;
+      whiteTime: number;
+      blackTime: number;
+    }
+  | {
+      type: "MOVE";
+      ZS_block: BlockData;
+      nextPlayer: Player;
+      whiteTime: number;
+      blackTime: number;
+    } // Legacy typo fix if any, keeping simple
+  | {
+      type: "MOVE";
+      KX_block: BlockData;
+      nextPlayer: Player;
+      whiteTime: number;
+      blackTime: number;
+    } // Legacy typo fix if any, keeping simple
+  | {
+      type: "MOVE";
+      block: BlockData;
+      nextPlayer: Player;
+      whiteTime: number;
+      blackTime: number;
+    }
+  | { type: "RESET" }
+  | { type: "OPPONENT_RESIGNED" };
