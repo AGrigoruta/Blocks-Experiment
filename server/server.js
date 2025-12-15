@@ -69,6 +69,7 @@ io.on("connection", (socket) => {
   socket.on("game_action", (payload) => {
     const { roomId, type, ...data } = payload;
     // Relay to everyone else in the room
+    console.log(`Relaying action in room ${roomId}:`, type, data);
     socket.to(roomId).emit("game_action", { type, ...data });
   });
 
