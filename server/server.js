@@ -7,14 +7,15 @@ const io = new Server(PORT, {
   cors: {
     origin: CORS_ORIGIN,
     methods: ["GET", "POST"],
-    credentials: true
-  }
+    credentials: true,
+  },
+  host: "0.0.0.0",
 });
 
 console.log(`Game Server running on port ${PORT}`);
 
 // State
-const rooms = new Map(); 
+const rooms = new Map();
 // Room Structure:
 // {
 //   id: string,
@@ -32,9 +33,9 @@ io.on("connection", (socket) => {
       id: roomId,
       white: socket.id,
       black: null,
-      spectators: []
+      spectators: [],
     });
-    
+
     socket.join(roomId);
     socket.emit("room_created", { roomId });
     console.log(`Room ${roomId} created by ${socket.id}`);
@@ -42,7 +43,7 @@ io.on("connection", (socket) => {
 
   socket.on("join_room", (roomId) => {
     const room = rooms.get(roomId);
-    
+
     if (!room) {
       socket.emit("error", { message: "Room not found" });
       return;
@@ -52,11 +53,11 @@ io.on("connection", (socket) => {
     if (!room.black) {
       room.black = socket.id;
       socket.join(roomId);
-      
+
       // Notify everyone game starts
       io.to(roomId).emit("game_start", {
         whiteId: room.white,
-        blackId: room.black
+        blackId: room.black,
       });
       console.log(`Game started in room ${roomId}`);
     } else {
