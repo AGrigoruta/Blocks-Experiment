@@ -194,6 +194,7 @@ function App() {
   const joinGame = (inputRoomId: string) => {
     const socket = connectSocket();
     if (socket) {
+      setRoomId(inputRoomId);
       // Allow a small delay for connection if needed, though usually socket.emit queues events
       socket.emit("join_room", inputRoomId);
     }
