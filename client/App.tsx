@@ -8,6 +8,7 @@ import React, {
 import { Canvas } from "@react-three/fiber";
 import { io, Socket } from "socket.io-client";
 import { GameScene } from "@/components/GameScene";
+import { Chat, ChatMessage } from "@/components/Chat";
 import {
   createEmptyGrid,
   findDropPosition,
@@ -44,8 +45,6 @@ const ZS_SERVER_URL =
   (import.meta as any).env?.VITE_SERVER_URL || "http://localhost:3000";
 
 function App() {
-  // --- Game State ---
-  // grid is now a Map<string, CellData>
   const [grid, setGrid] = useState<GridState>(createEmptyGrid());
   const [blocks, setBlocks] = useState<BlockData[]>([]);
   const [currentPlayer, setCurrentPlayer] = useState<Player>("white");
@@ -54,29 +53,23 @@ function App() {
     { x: number; y: number }[] | null
   >(null);
 
-  // --- Score State ---
   const [whiteScore, setWhiteScore] = useState(0);
   const [blackScore, setBlackScore] = useState(0);
 
-  // --- Player Names ---
   const [myName, setMyName] = useState("Player");
   const [whiteName, setWhiteName] = useState("White");
   const [blackName, setBlackName] = useState("Black");
 
-  // Local setup state
   const [localWhiteName, setLocalWhiteName] = useState("Player 1");
   const [localBlackName, setLocalBlackName] = useState("Player 2");
   const [showLocalSetup, setShowLocalSetup] = useState(false);
 
-  // --- Timer State ---
   const [whiteTime, setWhiteTime] = useState(INITIAL_TIME_SECONDS);
   const [blackTime, setBlackTime] = useState(INITIAL_TIME_SECONDS);
 
-  // --- Interaction State ---
   const [hoverX, setHoverX] = useState<number | null>(null);
   const [orientation, setOrientation] = useState<Orientation>("vertical");
 
-  // --- Network State ---
   const [gameMode, setGameMode] = useState<GameMode>("local");
   const [networkRole, setNetworkRole] = useState<NetworkRole>(null);
   const [myPlayer, setMyPlayer] = useState<Player>("white");
@@ -87,10 +80,18 @@ function App() {
   const [isInLobby, setIsInLobby] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // --- Rematch State ---
   const [rematchRequested, setRematchRequested] = useState(false);
   const [opponentRematchRequested, setOpponentRematchRequested] =
     useState(false);
+
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  const isChatOpenRef = useRef(isChatOpen);
+  useEffect(() => {
+    isChatOpenRef.current = isChatOpen;
+  }, [isChatOpen]);
 
   const socketRef = useRef<Socket | null>(null);
 
@@ -99,7 +100,6 @@ function App() {
     currentPlayerRef.current = currentPlayer;
   }, [currentPlayer]);
 
-  // --- Score Tracking ---
   useEffect(() => {
     if (winner && winner !== "draw") {
       if (winner === "white") setWhiteScore((s) => s + 1);
@@ -107,7 +107,6 @@ function App() {
     }
   }, [winner]);
 
-  // --- Timer Interval ---
   useEffect(() => {
     if (winner || isInLobby || showLocalSetup) return;
     const interval = setInterval(() => {
@@ -134,7 +133,6 @@ function App() {
     return () => clearInterval(interval);
   }, [winner, isInLobby, showLocalSetup]);
 
-  // --- Network Logic ---
   useEffect(() => {
     return () => {
       if (socketRef.current) {
@@ -169,6 +167,7 @@ function App() {
       setConnectionStatus("waiting");
       setNetworkRole("host");
       setMyPlayer("white");
+      setChatMessages([]); // Clear chat when creating a new room
     });
 
     socket.on(
@@ -189,15 +188,23 @@ function App() {
           setMyPlayer("white");
         }
 
-        // Reset rematch flags on game start
         setRematchRequested(false);
         setOpponentRematchRequested(false);
+
         internalReset();
+        // Note: We DO NOT clear chat here to allow persistence during rematch
       }
     );
 
     socket.on("game_action", (data: any) => {
       handleNetworkAction(data);
+    });
+
+    socket.on("receive_message", (msg: ChatMessage) => {
+      setChatMessages((prev) => [...prev, msg]);
+      if (!isChatOpenRef.current) {
+        setUnreadCount((prev) => prev + 1);
+      }
     });
 
     socket.on("rematch_requested", () => {
@@ -211,6 +218,7 @@ function App() {
       internalReset();
       setWhiteScore(0);
       setBlackScore(0);
+      setChatMessages([]); // Clear chat if session ends abruptly
     });
 
     socket.on("error", ({ message }) => {
@@ -247,6 +255,7 @@ function App() {
       socket.emit("join_room", { roomId: inputRoomId, playerName: myName });
       setWhiteScore(0);
       setBlackScore(0);
+      setChatMessages([]); // Clear chat when joining a new room
     }
   };
 
@@ -259,6 +268,7 @@ function App() {
     setConnectionStatus("idle");
     setNetworkRole(null);
     setRoomId("");
+    setChatMessages([]); // Clear chat when explicitly leaving/canceling
   };
 
   const sendNetworkAction = (action: any) => {
@@ -274,15 +284,23 @@ function App() {
     }
   };
 
+  const handleSendMessage = (text: string) => {
+    if (socketRef.current && roomId) {
+      socketRef.current.emit("send_message", {
+        roomId,
+        message: text,
+        playerName: myName,
+      });
+    }
+  };
+
   const handleNetworkAction = (data: any) => {
     if (data.type === "MOVE") {
       const { block, nextPlayer, wTime, bTime, isDraw } = data;
       setBlocks((prev) => {
         const newBlocks = [...prev, block];
-        // Rebuild grid fully from blocks to ensure sync and consistency with Map state
         const newGrid = rebuildGridFromBlocks(newBlocks);
 
-        // Check win
         const win = checkWin(newGrid, block.player);
         if (win) {
           setWinner(block.player);
@@ -291,7 +309,7 @@ function App() {
           setWinner("draw");
         }
 
-        setGrid(newGrid); // Sync grid state
+        setGrid(newGrid);
         return newBlocks;
       });
       setCurrentPlayer(nextPlayer);
@@ -301,8 +319,6 @@ function App() {
       internalReset();
     }
   };
-
-  // --- Game Logic ---
 
   const getGhost = useCallback(() => {
     if (hoverX === null || winner) return null;
@@ -322,7 +338,7 @@ function App() {
 
     return {
       x: validX,
-      y: targetY, // can be -1 if invalid
+      y: targetY,
       orientation,
       isValid: targetY !== -1 && isValid,
     };
@@ -354,7 +370,6 @@ function App() {
     setGrid(newGrid);
     setBlocks(newBlocks);
 
-    // Calc new times
     let newWhiteTime = whiteTime;
     let newBlackTime = blackTime;
     if (currentPlayer === "white") newWhiteTime += INCREMENT_SECONDS;
@@ -371,7 +386,6 @@ function App() {
       setWinner(currentPlayer);
       setWinningCells(winResult);
     } else {
-      // Check for draw condition
       const nextCanMove = hasValidMove(newGrid, nextPlayer);
       if (!nextCanMove) {
         const currentCanMove = hasValidMove(newGrid, currentPlayer);
@@ -428,6 +442,8 @@ function App() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement).tagName === "INPUT") return;
+
       if (isInLobby || showLocalSetup) return;
       if (e.code === "Space" || e.key === "r" || e.key === "R") {
         handleRotate();
@@ -446,7 +462,6 @@ function App() {
     return () => window.removeEventListener("contextmenu", handleContextMenu);
   }, [handleRotate]);
 
-  // --- Start Local Game ---
   const startLocalGame = () => {
     setGameMode("local");
     setWhiteName(localWhiteName || "Player 1");
@@ -458,7 +473,6 @@ function App() {
     internalReset();
   };
 
-  // --- Calculate Explosion Permission ---
   const canExplode = useMemo(() => {
     if (!winner) return false;
     if (winner === "draw") return true;
@@ -466,7 +480,6 @@ function App() {
     return myPlayer !== winner;
   }, [winner, gameMode, myPlayer]);
 
-  // --- Render Local Setup ---
   if (showLocalSetup) {
     return (
       <div className="w-full h-screen bg-gray-900 flex items-center justify-center p-4">
@@ -520,7 +533,6 @@ function App() {
     );
   }
 
-  // --- Render Lobby ---
   if (isInLobby) {
     return (
       <div className="w-full h-screen bg-gray-900 flex items-center justify-center p-4">
@@ -547,7 +559,7 @@ function App() {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth={2}
-                  d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
+                  d="M19 14l-7 7m0 0l-7-7m7 7V3"
                 />
               </svg>
               Pass & Play (Local)
@@ -561,7 +573,6 @@ function App() {
               <div className="flex-grow border-t border-gray-700"></div>
             </div>
 
-            {/* Online Name Input */}
             <div className="mb-2">
               <label className="block text-gray-400 text-xs mb-1 ml-1">
                 Your Name
@@ -674,10 +685,8 @@ function App() {
         />
       </Canvas>
 
-      {/* Top HUD with Timers */}
       <div className="absolute top-0 left-0 w-full p-4 pointer-events-none z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="bg-black/80 backdrop-blur-md px-6 py-3 rounded-xl text-white shadow-xl border border-white/10 flex items-center gap-6 md:gap-8 min-w-[300px] justify-between">
-          {/* White Player */}
           <div
             className={`flex items-center gap-3 transition-opacity duration-300 ${
               currentPlayer === "white" && !winner
@@ -702,7 +711,6 @@ function App() {
                 <span className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-0.5">
                   {whiteName}
                 </span>
-                {/* Score */}
                 <span className="text-xs bg-gray-700 px-1.5 rounded text-white">
                   {whiteScore}
                 </span>
@@ -731,7 +739,6 @@ function App() {
             )}
           </div>
 
-          {/* Black Player */}
           <div
             className={`flex items-center gap-3 transition-opacity duration-300 ${
               currentPlayer === "black" && !winner
@@ -741,7 +748,6 @@ function App() {
           >
             <div className="flex flex-col items-end">
               <div className="flex items-center gap-2">
-                {/* Score */}
                 <span className="text-xs bg-gray-700 px-1.5 rounded text-white">
                   {blackScore}
                 </span>
@@ -834,6 +840,50 @@ function App() {
             )}
           </div>
         </div>
+      )}
+
+      {gameMode === "online" && !isInLobby && !winner && (
+        <div className="absolute bottom-20 right-4 pointer-events-auto z-50">
+          {!isChatOpen && (
+            <button
+              onClick={() => {
+                setIsChatOpen(true);
+                setUnreadCount(0);
+              }}
+              className="bg-blue-600 hover:bg-blue-500 text-white p-3 rounded-full shadow-lg transition-transform hover:scale-110 relative"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-6 w-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                />
+              </svg>
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center border-2 border-gray-900 animate-pulse">
+                  {unreadCount}
+                </span>
+              )}
+            </button>
+          )}
+        </div>
+      )}
+
+      {gameMode === "online" && (
+        <Chat
+          isOpen={isChatOpen}
+          onClose={() => setIsChatOpen(false)}
+          messages={chatMessages}
+          onSendMessage={handleSendMessage}
+          myName={myName}
+        />
       )}
 
       <div className="absolute bottom-0 left-0 w-full p-4 pointer-events-none z-10 flex flex-col items-center gap-4 pb-8 md:pb-4">

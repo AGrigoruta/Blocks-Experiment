@@ -93,6 +93,19 @@ io.on("connection", (socket) => {
     socket.to(roomId).emit("game_action", { type, ...data });
   });
 
+  socket.on("send_message", (data) => {
+    const { roomId, message, playerName } = data;
+    if (!roomId) return;
+
+    // Broadcast to room
+    io.to(roomId).emit("receive_message", {
+      sender: playerName,
+      text: message,
+      timestamp: Date.now(),
+      id: Math.random().toString(36).substr(2, 9),
+    });
+  });
+
   socket.on("request_rematch", ({ roomId }) => {
     const room = rooms.get(roomId);
     if (!room) return;
