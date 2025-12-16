@@ -182,6 +182,7 @@ function App() {
 
   const [whiteTime, setWhiteTime] = useState(INITIAL_TIME_SECONDS);
   const [blackTime, setBlackTime] = useState(INITIAL_TIME_SECONDS);
+  const [gameStartTime, setGameStartTime] = useState<number | null>(null);
 
   const [hoverX, setHoverX] = useState<number | null>(null);
   const [orientation, setOrientation] = useState<Orientation>("vertical");
@@ -222,6 +223,48 @@ function App() {
       else setBlackScore((s) => s + 1);
     }
   }, [winner]);
+
+  // Save match to database when game ends
+  useEffect(() => {
+    if (winner && gameStartTime) {
+      // Only save once: in local mode or if we're the white player in online mode
+      const shouldSave =
+        gameMode === "local" || (gameMode === "online" && myPlayer === "white");
+
+      if (!shouldSave) return;
+
+      const matchEndTime = Date.now();
+      const matchDurationSeconds = Math.round(
+        (matchEndTime - gameStartTime) / 1000
+      );
+
+      // Count blocks for each player
+      const whiteBlocks = blocks.filter((b) => b.player === "white").length;
+      const blackBlocks = blocks.filter((b) => b.player === "black").length;
+
+      const matchData = {
+        whiteName: gameMode === "local" ? localWhiteName : whiteName,
+        blackName: gameMode === "local" ? localBlackName : blackName,
+        winner: winner, // "white", "black", or "draw"
+        matchTime: matchDurationSeconds, // in seconds
+        whiteNumberOfBlocks: whiteBlocks,
+        blackNumberOfBlocks: blackBlocks,
+        matchEndTimestamp: new Date(matchEndTime).toISOString(),
+      };
+
+      // Connect socket if needed for local games
+      if (gameMode === "local" && !socketRef.current?.connected) {
+        const socket = connectSocket();
+        socket.once("connect", () => {
+          socket.emit("save_match", matchData);
+          console.log("Match saved (local):", matchData);
+        });
+      } else if (socketRef.current?.connected) {
+        socketRef.current.emit("save_match", matchData);
+        console.log("Match saved:", matchData);
+      }
+    }
+  }, [winner, gameStartTime, blocks, gameMode, localWhiteName, localBlackName, whiteName, blackName, myPlayer]);
 
   useEffect(() => {
     if (winner || isInLobby || showLocalSetup) return;
@@ -576,6 +619,7 @@ function App() {
     setHoverX(null);
     setWhiteTime(INITIAL_TIME_SECONDS);
     setBlackTime(INITIAL_TIME_SECONDS);
+    setGameStartTime(Date.now());
   };
 
   const handleReset = () => {
