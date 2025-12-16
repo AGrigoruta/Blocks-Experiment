@@ -7,6 +7,8 @@
     "dev": "node server.js"
   },
   "dependencies": {
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.1",
+    "pg": "^8.13.1",
+    "dotenv": "^16.4.5"
   }
 }

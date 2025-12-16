@@ -1,4 +1,11 @@
+import "dotenv/config";
 import { Server } from "socket.io";
+import {
+  saveMatch,
+  getAllMatches,
+  getMatchesByPlayer,
+  getPlayerStats,
+} from "./db.js";
 
 const PORT = process.env.PORT || 3000;
 const CORS_ORIGIN = process.env.CORS_ORIGIN || "*";
@@ -141,6 +148,46 @@ io.on("connection", (socket) => {
         blackName: room.blackName,
       });
     }
+  });
+
+  socket.on("save_match", (matchData) => {
+    saveMatch(matchData)
+      .then((savedMatch) => {
+        console.log("Match saved:", savedMatch);
+        socket.emit("match_saved", { success: true, matchId: savedMatch.id });
+      })
+      .catch((error) => {
+        console.error("Error saving match:", error);
+        socket.emit("match_saved", { success: false, error: error.message });
+      });
+  });
+
+  socket.on("get_matches", (data) => {
+    const { playerName, limit } = data || {};
+    const matchesPromise = playerName
+      ? getMatchesByPlayer(playerName, limit)
+      : getAllMatches(limit);
+
+    matchesPromise
+      .then((matches) => {
+        socket.emit("matches_data", { matches });
+      })
+      .catch((error) => {
+        console.error("Error fetching matches:", error);
+        socket.emit("matches_data", { matches: [], error: error.message });
+      });
+  });
+
+  socket.on("get_player_stats", (data) => {
+    const { playerName } = data;
+    getPlayerStats(playerName)
+      .then((stats) => {
+        socket.emit("player_stats", { stats });
+      })
+      .catch((error) => {
+        console.error("Error fetching player stats:", error);
+        socket.emit("player_stats", { stats: null, error: error.message });
+      });
   });
 
   socket.on("leave_room", (roomId) => {

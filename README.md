@@ -27,20 +27,38 @@ Blocks/
 
 ## Run Locally
 
-**Prerequisites:** Node.js
+**Prerequisites:** 
+- Node.js
+- PostgreSQL (see [LOCAL_POSTGRES_SETUP.md](LOCAL_POSTGRES_SETUP.md) for setup)
+- Docker (optional, recommended for PostgreSQL)
 
-### Quick Start
+### Quick Start with Docker
 
-1. Install dependencies for both client and server:
+1. Start PostgreSQL database:
+   ```bash
+   cd server
+   docker-compose up -d
+   ```
 
+2. Install dependencies for both client and server:
    ```bash
    npm run install:all
    ```
 
-2. Run both server and client in development mode:
+3. Set up environment variables:
+   ```bash
+   cp server/.env.example server/.env
+   # Edit server/.env if needed (default values work with Docker setup)
+   ```
+
+4. Run both server and client in development mode:
    ```bash
    npm run dev
    ```
+
+### Without Docker
+
+See [LOCAL_POSTGRES_SETUP.md](LOCAL_POSTGRES_SETUP.md) for native PostgreSQL installation instructions.
 
 ### Individual Commands
 
