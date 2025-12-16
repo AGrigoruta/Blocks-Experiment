@@ -537,6 +537,7 @@ interface GameSceneProps {
   onHover: (x: number) => void;
   onClick: () => void;
   winningCells: { x: number; y: number }[] | null;
+  canExplode: boolean;
 }
 
 export const GameScene: React.FC<GameSceneProps> = ({
@@ -546,6 +547,7 @@ export const GameScene: React.FC<GameSceneProps> = ({
   onHover,
   onClick,
   winningCells,
+  canExplode,
 }) => {
   const dragStart = useRef({ x: 0, y: 0 });
   const controlsRef = useRef<any>(null);
@@ -589,9 +591,8 @@ export const GameScene: React.FC<GameSceneProps> = ({
     const dist = Math.sqrt(dx * dx + dy * dy);
     if (dist > 10) return;
 
-    // Check if game is won/drawn
-    if (winningCells || (blocks.length > 0 && !ghost)) {
-      // Explode!
+    // Check explosion validity
+    if (canExplode) {
       setExplosion({
         position: e.point.clone(),
         time: Date.now(),

@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  useMemo,
+} from "react";
 import { Canvas } from "@react-three/fiber";
 import { io, Socket } from "socket.io-client";
 import { GameScene } from "@/components/GameScene";
@@ -422,6 +428,14 @@ function App() {
     internalReset();
   };
 
+  // --- Calculate Explosion Permission ---
+  const canExplode = useMemo(() => {
+    if (!winner) return false;
+    if (winner === "draw") return true;
+    if (gameMode === "local") return true;
+    return myPlayer !== winner;
+  }, [winner, gameMode, myPlayer]);
+
   // --- Render Local Setup ---
   if (showLocalSetup) {
     return (
@@ -626,6 +640,7 @@ function App() {
           onHover={setHoverX}
           onClick={handlePlace}
           winningCells={winningCells}
+          canExplode={canExplode}
         />
       </Canvas>
 
@@ -766,6 +781,11 @@ function App() {
                   VICTORY
                 </div>
               )}
+            {canExplode && (
+              <div className="mt-4 text-xs text-white/50 animate-pulse uppercase tracking-widest font-mono">
+                Click board to explode
+              </div>
+            )}
           </div>
         </div>
       )}
