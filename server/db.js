@@ -113,20 +113,24 @@ export async function getMatchesByPlayer(playerName, limit = 50) {
 /**
  * Get match statistics for a player
  * @param {string} playerName - Name of the player
- * @returns {Object} Statistics object with wins, losses, and draws
+ * @returns {Object} Statistics object with wins, losses, draws, averages
  */
 export async function getPlayerStats(playerName) {
   const query = `
     SELECT 
-      COUNT(*) as totalMatches,
+      COUNT(*)::int as "totalMatches",
       SUM(CASE WHEN winner = 'white' AND whiteName = $1 THEN 1 
                WHEN winner = 'black' AND blackName = $1 THEN 1 
-               ELSE 0 END) as wins,
-      SUM(CASE WHEN winner = 'draw' THEN 1 ELSE 0 END) as draws,
+               ELSE 0 END)::int as wins,
+      SUM(CASE WHEN winner = 'draw' THEN 1 ELSE 0 END)::int as draws,
       SUM(CASE WHEN winner = 'white' AND blackName = $1 THEN 1 
                WHEN winner = 'black' AND whiteName = $1 THEN 1 
-               ELSE 0 END) as losses,
-      AVG(matchTime) as avgMatchTime
+               ELSE 0 END)::int as losses,
+      COALESCE(AVG(matchTime), 0)::float as "avgMatchTime",
+      COALESCE(AVG(CASE 
+        WHEN whiteName = $1 THEN whiteNumberOfBlocks 
+        ELSE blackNumberOfBlocks 
+      END), 0)::float as "avgBlocks"
     FROM matches
     WHERE whiteName = $1 OR blackName = $1
   `;

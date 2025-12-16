@@ -59,7 +59,7 @@ io.on("connection", (socket) => {
     console.log(`Room ${roomId} created by ${socket.id} (${playerName})`);
   });
 
-  socket.on("join_room", (data) => {
+  socket.on("join_room", async (data) => {
     // Support both old string format and new object format
     const roomId = typeof data === "string" ? data : data.roomId;
     const playerName = typeof data === "object" ? data.playerName : "Black";
@@ -77,12 +77,24 @@ io.on("connection", (socket) => {
       room.blackName = playerName;
       socket.join(roomId);
 
+      // Fetch stats for both players
+      let whiteStats = null;
+      let blackStats = null;
+      try {
+        whiteStats = await getPlayerStats(room.whiteName);
+        blackStats = await getPlayerStats(room.blackName);
+      } catch (err) {
+        console.error("Error fetching stats on game start:", err);
+      }
+
       // Notify everyone game starts
       io.to(roomId).emit("game_start", {
         whiteId: room.white,
         blackId: room.black,
         whiteName: room.whiteName,
         blackName: room.blackName,
+        whiteStats,
+        blackStats,
       });
       console.log(
         `Game started in room ${roomId}. ${room.whiteName} vs ${room.blackName}`
@@ -113,7 +125,7 @@ io.on("connection", (socket) => {
     });
   });
 
-  socket.on("request_rematch", ({ roomId }) => {
+  socket.on("request_rematch", async ({ roomId }) => {
     const room = rooms.get(roomId);
     if (!room) return;
 
@@ -140,12 +152,24 @@ io.on("connection", (socket) => {
 
       console.log(`Rematch starting in room ${roomId}. Swapping roles.`);
 
+      // Fetch stats again (in case they updated after the last match)
+      let whiteStats = null;
+      let blackStats = null;
+      try {
+        whiteStats = await getPlayerStats(room.whiteName);
+        blackStats = await getPlayerStats(room.blackName);
+      } catch (err) {
+        console.error("Error fetching stats on rematch:", err);
+      }
+
       // Restart game with swapped roles
       io.to(roomId).emit("game_start", {
         whiteId: room.white,
         blackId: room.black,
         whiteName: room.whiteName,
         blackName: room.blackName,
+        whiteStats,
+        blackStats,
       });
     }
   });
