@@ -45,7 +45,8 @@ export interface PlayerStats {
 
 // --- Network Types ---
 
-export type GameMode = "local" | "online";
+export type GameMode = "local" | "online" | "ai";
+export type AIDifficulty = "easy" | "medium" | "hard";
 export type NetworkRole = "host" | "client" | null;
 
 // SYNC_STATE only sends blocks now; clients reconstruct the grid.

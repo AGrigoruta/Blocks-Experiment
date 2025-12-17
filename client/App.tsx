@@ -9,6 +9,7 @@ import { Canvas } from "@react-three/fiber";
 import { io, Socket } from "socket.io-client";
 import { GameScene } from "@/components/GameScene";
 import { Chat, ChatMessage } from "@/components/Chat";
+import { Tutorial } from "@/components/Tutorial";
 import {
   createEmptyGrid,
   findDropPosition,
@@ -18,12 +19,14 @@ import {
   rebuildGridFromBlocks,
   hasValidMove,
 } from "@/utils/gameLogic";
+import { getBestMove } from "@/utils/aiPlayer";
 import {
   GridState,
   BlockData,
   Player,
   Orientation,
   GameMode,
+  AIDifficulty,
   NetworkRole,
   NetworkMessage,
   PlayerStats,
@@ -42,7 +45,7 @@ const formatTime = (seconds: number) => {
   return `${m}:${s.toString().padStart(2, "0")}`;
 };
 
-const ZS_SERVER_URL =
+const SERVER_URL =
   (import.meta as any).env?.VITE_SERVER_URL || "http://localhost:3000";
 
 // --- Player Card Modal ---
@@ -179,6 +182,13 @@ function App() {
   const [localWhiteName, setLocalWhiteName] = useState("Player 1");
   const [localBlackName, setLocalBlackName] = useState("Player 2");
   const [showLocalSetup, setShowLocalSetup] = useState(false);
+  const [showAISetup, setShowAISetup] = useState(false);
+  const [aiDifficulty, setAIDifficulty] = useState<AIDifficulty>("medium");
+  const [aiPlayer, setAIPlayer] = useState<Player>("black");
+  const [isAiThinking, setIsAiThinking] = useState(false);
+
+  // Tutorial State
+  const [showTutorial, setShowTutorial] = useState(false);
 
   const [whiteTime, setWhiteTime] = useState(INITIAL_TIME_SECONDS);
   const [blackTime, setBlackTime] = useState(INITIAL_TIME_SECONDS);
@@ -229,7 +239,9 @@ function App() {
     if (winner && gameStartTime) {
       // Only save once: in local mode or if we're the white player in online mode
       const shouldSave =
-        gameMode === "local" || (gameMode === "online" && myPlayer === "white");
+        gameMode === "local" ||
+        gameMode === "ai" ||
+        (gameMode === "online" && myPlayer === "white");
 
       if (!shouldSave) return;
 
@@ -243,8 +255,22 @@ function App() {
       const blackBlocks = blocks.filter((b) => b.player === "black").length;
 
       const matchData = {
-        whiteName: gameMode === "local" ? localWhiteName : whiteName,
-        blackName: gameMode === "local" ? localBlackName : blackName,
+        whiteName:
+          gameMode === "local"
+            ? localWhiteName
+            : gameMode === "ai"
+            ? aiPlayer === "black"
+              ? myName
+              : "AI"
+            : whiteName,
+        blackName:
+          gameMode === "local"
+            ? localBlackName
+            : gameMode === "ai"
+            ? aiPlayer === "white"
+              ? myName
+              : "AI"
+            : blackName,
         winner: winner, // "white", "black", or "draw"
         matchTime: matchDurationSeconds, // in seconds
         whiteNumberOfBlocks: whiteBlocks,
@@ -253,21 +279,36 @@ function App() {
       };
 
       // Connect socket if needed for local games
-      if (gameMode === "local" && !socketRef.current?.connected) {
+      if (
+        (gameMode === "local" || gameMode === "ai") &&
+        !socketRef.current?.connected
+      ) {
         const socket = connectSocket();
         socket.once("connect", () => {
           socket.emit("save_match", matchData);
-          console.log("Match saved (local):", matchData);
+          console.log("Match saved (local/ai):", matchData);
         });
       } else if (socketRef.current?.connected) {
         socketRef.current.emit("save_match", matchData);
         console.log("Match saved:", matchData);
       }
     }
-  }, [winner, gameStartTime, blocks, gameMode, localWhiteName, localBlackName, whiteName, blackName, myPlayer]);
+  }, [
+    winner,
+    gameStartTime,
+    blocks,
+    gameMode,
+    localWhiteName,
+    localBlackName,
+    whiteName,
+    blackName,
+    myPlayer,
+    aiPlayer,
+    myName,
+  ]);
 
   useEffect(() => {
-    if (winner || isInLobby || showLocalSetup) return;
+    if (winner || isInLobby || showLocalSetup || showAISetup) return;
     const interval = setInterval(() => {
       const active = currentPlayerRef.current;
       if (active === "white") {
@@ -290,7 +331,43 @@ function App() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [winner, isInLobby, showLocalSetup]);
+  }, [winner, isInLobby, showLocalSetup, showAISetup]);
+
+  // AI Turn Logic
+  useEffect(() => {
+    if (
+      gameMode === "ai" &&
+      currentPlayer === aiPlayer &&
+      !winner &&
+      !isInLobby
+    ) {
+      setIsAiThinking(true);
+      const timer = setTimeout(() => {
+        const bestMove = getBestMove(grid, aiPlayer, aiDifficulty);
+        if (bestMove) {
+          handleAIPlace(bestMove);
+        } else {
+          // AI has no moves, check for draw or win for other
+          const otherPlayer = aiPlayer === "white" ? "black" : "white";
+          if (!hasValidMove(grid, otherPlayer)) {
+            setWinner("draw");
+          } else {
+            setWinner(otherPlayer);
+          }
+        }
+        setIsAiThinking(false);
+      }, 800); // Small delay to feel natural
+      return () => clearTimeout(timer);
+    }
+  }, [
+    gameMode,
+    currentPlayer,
+    aiPlayer,
+    winner,
+    isInLobby,
+    grid,
+    aiDifficulty,
+  ]);
 
   // Auto-show opponent stats on game start (only once)
   useEffect(() => {
@@ -319,7 +396,7 @@ function App() {
     if (socketRef.current?.connected) return socketRef.current;
 
     setConnectionStatus("connecting");
-    const socket = io(ZS_SERVER_URL, {
+    const socket = io(SERVER_URL, {
       transports: ["websocket"],
       reconnectionAttempts: 5,
     });
@@ -509,9 +586,10 @@ function App() {
   };
 
   const getGhost = useCallback(() => {
-    if (hoverX === null || winner) return null;
+    if (hoverX === null || winner || isAiThinking) return null;
 
     if (gameMode === "online" && currentPlayer !== myPlayer) return null;
+    if (gameMode === "ai" && currentPlayer === aiPlayer) return null;
 
     const validX = hoverX;
 
@@ -530,18 +608,29 @@ function App() {
       orientation,
       isValid: targetY !== -1 && isValid,
     };
-  }, [hoverX, orientation, grid, currentPlayer, winner, gameMode, myPlayer]);
+  }, [
+    hoverX,
+    orientation,
+    grid,
+    currentPlayer,
+    winner,
+    gameMode,
+    myPlayer,
+    aiPlayer,
+    isAiThinking,
+  ]);
 
   const ghost = getGhost();
 
   const handleRotate = useCallback(() => {
-    if (winner) return;
+    if (winner || isAiThinking) return;
     if (gameMode === "online" && currentPlayer !== myPlayer) return;
+    if (gameMode === "ai" && currentPlayer === aiPlayer) return null;
     setOrientation((prev) => (prev === "vertical" ? "horizontal" : "vertical"));
-  }, [winner, gameMode, currentPlayer, myPlayer]);
+  }, [winner, gameMode, currentPlayer, myPlayer, aiPlayer, isAiThinking]);
 
   const handlePlace = useCallback(() => {
-    if (!ghost || !ghost.isValid || winner) return;
+    if (!ghost || !ghost.isValid || winner || isAiThinking) return;
     if (gameMode === "online" && currentPlayer !== myPlayer) return;
 
     const newBlock: BlockData = {
@@ -552,6 +641,25 @@ function App() {
       player: currentPlayer,
     };
 
+    applyNewBlock(newBlock);
+  }, [
+    ghost,
+    grid,
+    blocks,
+    currentPlayer,
+    winner,
+    gameMode,
+    myPlayer,
+    whiteTime,
+    blackTime,
+    isAiThinking,
+  ]);
+
+  const handleAIPlace = (bestMove: BlockData) => {
+    applyNewBlock(bestMove);
+  };
+
+  const applyNewBlock = (newBlock: BlockData) => {
     const newGrid = applyBlockToGrid(grid, newBlock);
     const newBlocks = [...blocks, newBlock];
 
@@ -597,17 +705,7 @@ function App() {
         isDraw,
       });
     }
-  }, [
-    ghost,
-    grid,
-    blocks,
-    currentPlayer,
-    winner,
-    gameMode,
-    myPlayer,
-    whiteTime,
-    blackTime,
-  ]);
+  };
 
   const internalReset = () => {
     setGrid(createEmptyGrid());
@@ -620,6 +718,7 @@ function App() {
     setWhiteTime(INITIAL_TIME_SECONDS);
     setBlackTime(INITIAL_TIME_SECONDS);
     setGameStartTime(Date.now());
+    setIsAiThinking(false);
   };
 
   const handleReset = () => {
@@ -633,14 +732,14 @@ function App() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).tagName === "INPUT") return;
 
-      if (isInLobby || showLocalSetup) return;
+      if (isInLobby || showLocalSetup || showAISetup) return;
       if (e.code === "Space" || e.key === "r" || e.key === "R") {
         handleRotate();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleRotate, isInLobby, showLocalSetup]);
+  }, [handleRotate, isInLobby, showLocalSetup, showAISetup]);
 
   useEffect(() => {
     const handleContextMenu = (e: MouseEvent) => {
@@ -664,16 +763,34 @@ function App() {
     internalReset();
   };
 
+  const startAIGame = () => {
+    setGameMode("ai");
+    setMyPlayer(aiPlayer === "white" ? "black" : "white");
+    setWhiteName(aiPlayer === "white" ? "AI" : myName);
+    setBlackName(aiPlayer === "black" ? "AI" : myName);
+    setWhiteStats(null);
+    setBlackStats(null);
+    setShowAISetup(false);
+    setIsInLobby(false);
+    setWhiteScore(0);
+    setBlackScore(0);
+    internalReset();
+  };
+
   const canExplode = useMemo(() => {
     if (!winner) return false;
     if (winner === "draw") return true;
-    if (gameMode === "local") return true;
+    if (gameMode === "local" || gameMode === "ai") return true;
     return myPlayer !== winner;
   }, [winner, gameMode, myPlayer]);
 
   if (showLocalSetup) {
     return (
       <div className="w-full h-[100dvh] bg-gray-900 flex items-center justify-center p-4">
+        <Tutorial
+          isOpen={showTutorial}
+          onClose={() => setShowTutorial(false)}
+        />
         <div className="max-w-md w-full bg-gray-800 p-8 rounded-2xl shadow-2xl border border-gray-700 animate-in fade-in zoom-in duration-300">
           <h2 className="text-2xl font-bold text-white text-center mb-6">
             Local Game Setup
@@ -724,18 +841,160 @@ function App() {
     );
   }
 
+  if (showAISetup) {
+    return (
+      <div className="w-full h-[100dvh] bg-gray-900 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-gray-800 p-8 rounded-2xl shadow-2xl border border-gray-700 animate-in fade-in zoom-in duration-300">
+          <h2 className="text-2xl font-bold text-white text-center mb-6">
+            Solo Challenge
+          </h2>
+
+          <div className="space-y-6 mb-8">
+            <div>
+              <label className="block text-gray-400 text-xs uppercase tracking-widest font-bold mb-3">
+                Difficulty
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {(["easy", "medium", "hard"] as AIDifficulty[]).map((d) => (
+                  <button
+                    key={d}
+                    onClick={() => setAIDifficulty(d)}
+                    className={`py-2 text-xs font-bold rounded-lg border transition uppercase tracking-tighter ${
+                      aiDifficulty === d
+                        ? "bg-indigo-600 border-indigo-400 text-white shadow-lg"
+                        : "bg-gray-700 border-gray-600 text-gray-400 hover:bg-gray-600"
+                    }`}
+                  >
+                    {d}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-gray-400 text-xs uppercase tracking-widest font-bold mb-3">
+                Play As
+              </label>
+              <div className="grid grid-cols-2 gap-4">
+                <button
+                  onClick={() => setAIPlayer("black")}
+                  className={`py-3 rounded-xl border flex items-center justify-center gap-2 transition ${
+                    aiPlayer === "black"
+                      ? "bg-amber-600 border-amber-400 text-white"
+                      : "bg-gray-700 border-gray-600 text-gray-400 hover:bg-gray-600"
+                  }`}
+                >
+                  <div className="w-3 h-3 rounded-full bg-amber-200"></div>
+                  White (1st)
+                </button>
+                <button
+                  onClick={() => setAIPlayer("white")}
+                  className={`py-3 rounded-xl border flex items-center justify-center gap-2 transition ${
+                    aiPlayer === "white"
+                      ? "bg-neutral-900 border-neutral-600 text-white"
+                      : "bg-gray-700 border-gray-600 text-gray-400 hover:bg-gray-600"
+                  }`}
+                >
+                  <div className="w-3 h-3 rounded-full bg-neutral-950 border border-white/20"></div>
+                  Black (2nd)
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-gray-400 text-xs uppercase tracking-widest font-bold mb-2">
+                Your Name
+              </label>
+              <input
+                type="text"
+                value={myName}
+                onChange={(e) => setMyName(e.target.value)}
+                className="w-full bg-gray-900 border border-gray-600 text-white px-4 py-2 rounded-lg focus:outline-none focus:border-indigo-500"
+                placeholder="Enter your name"
+                maxLength={12}
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              onClick={() => setShowAISetup(false)}
+              className="flex-1 py-3 bg-gray-700 hover:bg-gray-600 text-white font-bold rounded-xl transition"
+            >
+              Back
+            </button>
+            <button
+              onClick={startAIGame}
+              className="flex-[2] py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition shadow-lg"
+            >
+              Launch Match
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (isInLobby) {
     return (
       <div className="w-full h-[100dvh] bg-gray-900 flex items-center justify-center p-4">
+        <Tutorial
+          isOpen={showTutorial}
+          onClose={() => setShowTutorial(false)}
+        />
         <div className="max-w-md w-full bg-gray-800 p-8 rounded-2xl shadow-2xl border border-gray-700">
           <h1 className="text-4xl font-bold text-white text-center mb-2 tracking-wider">
             BLOCKS 3D
           </h1>
-          <p className="text-gray-400 text-center mb-8">
+          <p className="text-gray-400 text-center mb-6">
             Structural Strategy Game
           </p>
 
+          <div className="flex justify-center mb-6">
+            <button
+              onClick={() => setShowTutorial(true)}
+              className="text-blue-400 text-sm hover:text-blue-300 font-bold flex items-center gap-1 transition-colors"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+              How to Play
+            </button>
+          </div>
+
           <div className="space-y-4">
+            <button
+              onClick={() => setShowAISetup(true)}
+              className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition shadow-lg flex items-center justify-center gap-2"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-6 w-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                />
+              </svg>
+              Solo (vs AI)
+            </button>
+
             <button
               onClick={() => setShowLocalSetup(true)}
               className="w-full py-4 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl transition shadow-lg flex items-center justify-center gap-2"
@@ -791,15 +1050,15 @@ function App() {
                     setGameMode("online");
                     startHost();
                   }}
-                  className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition shadow-lg flex items-center justify-center gap-2"
+                  className="w-full py-3 bg-blue-700 hover:bg-blue-600 text-white font-bold rounded-xl transition shadow-lg flex items-center justify-center gap-2 border border-blue-500/30"
                 >
-                  Host Game
+                  Host Online Match
                 </button>
 
                 <div className="flex gap-2">
                   <input
                     type="text"
-                    placeholder="Room Code (4 chars)"
+                    placeholder="Room Code"
                     id="roomInput"
                     maxLength={4}
                     className="flex-1 bg-gray-900 border border-gray-700 text-white px-4 rounded-xl uppercase tracking-widest text-center focus:outline-none focus:border-indigo-500"
@@ -859,6 +1118,9 @@ function App() {
 
   return (
     <div className="relative w-full h-[100dvh] bg-gray-900 font-sans select-none overflow-hidden touch-none">
+      {/* Components Overlay */}
+      <Tutorial isOpen={showTutorial} onClose={() => setShowTutorial(false)} />
+
       {/* Player Stats Modal */}
       {viewStatsPlayer && (
         <PlayerCardModal
@@ -946,9 +1208,15 @@ function App() {
               >
                 {formatTime(whiteTime)}
               </span>
-              {gameMode === "online" && (
+              {(gameMode === "online" || gameMode === "ai") && (
                 <span className="text-[10px] text-gray-500 uppercase">
-                  {myPlayer === "white" ? "YOU" : "OPP"}
+                  {gameMode === "ai"
+                    ? aiPlayer === "white"
+                      ? "CPU"
+                      : "YOU"
+                    : myPlayer === "white"
+                    ? "YOU"
+                    : "OPP"}
                 </span>
               )}
             </div>
@@ -959,6 +1227,11 @@ function App() {
             {gameMode === "online" && (
               <span className="text-[10px] text-green-500 tracking-wider">
                 LIVE
+              </span>
+            )}
+            {gameMode === "ai" && (
+              <span className="text-[10px] text-indigo-400 tracking-wider uppercase">
+                {aiDifficulty}
               </span>
             )}
           </div>
@@ -1009,9 +1282,15 @@ function App() {
               >
                 {formatTime(blackTime)}
               </span>
-              {gameMode === "online" && (
+              {(gameMode === "online" || gameMode === "ai") && (
                 <span className="text-[10px] text-gray-500 uppercase">
-                  {myPlayer === "black" ? "YOU" : "OPP"}
+                  {gameMode === "ai"
+                    ? aiPlayer === "black"
+                      ? "CPU"
+                      : "YOU"
+                    : myPlayer === "black"
+                    ? "YOU"
+                    : "OPP"}
                 </span>
               )}
             </div>
@@ -1031,6 +1310,28 @@ function App() {
         </div>
 
         <div className="pointer-events-auto flex gap-2">
+          {/* In-Game Help Button */}
+          <button
+            onClick={() => setShowTutorial(true)}
+            className="w-10 h-10 flex items-center justify-center bg-gray-800/80 hover:bg-gray-700 text-blue-400 rounded-lg transition border border-gray-700 backdrop-blur-md"
+            title="How to Play"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+          </button>
+
           <button
             onClick={() => {
               cancelHosting();
@@ -1043,7 +1344,7 @@ function App() {
           >
             Quit
           </button>
-          {gameMode === "local" && (
+          {(gameMode === "local" || gameMode === "ai") && (
             <button
               onClick={handleReset}
               className="px-4 py-2 bg-white/10 hover:bg-white/20 active:bg-white/30 text-white rounded-lg transition text-sm font-medium border border-white/10 backdrop-blur-md"
@@ -1073,9 +1374,14 @@ function App() {
                 ? "ON TIME"
                 : "BY CHECKMATE"}
             </div>
-            {gameMode === "online" &&
+            {(gameMode === "online" || gameMode === "ai") &&
               winner !== "draw" &&
-              winner === myPlayer && (
+              winner ===
+                (gameMode === "ai"
+                  ? aiPlayer === "white"
+                    ? "black"
+                    : "white"
+                  : myPlayer) && (
                 <div className="mt-2 text-xs bg-white/20 px-2 py-1 rounded text-white font-bold">
                   VICTORY
                 </div>
@@ -1141,6 +1447,10 @@ function App() {
                 {currentPlayer === "white" ? whiteName : blackName} is
                 thinking...
               </span>
+            ) : gameMode === "ai" && currentPlayer === aiPlayer ? (
+              <span className="text-indigo-400 animate-pulse">
+                AI is calculating...
+              </span>
             ) : (
               <span>Rotate: Right Click / Space • Place: Left Click</span>
             )}
@@ -1152,10 +1462,14 @@ function App() {
             <>
               <button
                 onClick={handleRotate}
-                disabled={gameMode === "online" && currentPlayer !== myPlayer}
+                disabled={
+                  (gameMode === "online" && currentPlayer !== myPlayer) ||
+                  (gameMode === "ai" && currentPlayer === aiPlayer)
+                }
                 className={`flex-1 h-14 font-bold rounded-2xl shadow-lg backdrop-blur-sm border border-white/10 transition-transform active:scale-95 flex items-center justify-center gap-2
                   ${
-                    gameMode === "online" && currentPlayer !== myPlayer
+                    (gameMode === "online" && currentPlayer !== myPlayer) ||
+                    (gameMode === "ai" && currentPlayer === aiPlayer)
                       ? "bg-gray-700/50 text-gray-500 cursor-not-allowed"
                       : "bg-blue-600/90 hover:bg-blue-500 active:bg-blue-400 text-white"
                   }`}
@@ -1181,12 +1495,14 @@ function App() {
                 onClick={handlePlace}
                 disabled={
                   !ghost?.isValid ||
-                  (gameMode === "online" && currentPlayer !== myPlayer)
+                  (gameMode === "online" && currentPlayer !== myPlayer) ||
+                  (gameMode === "ai" && currentPlayer === aiPlayer)
                 }
                 className={`flex-[2] h-14 font-bold rounded-2xl shadow-lg backdrop-blur-sm border border-white/10 transition-all active:scale-95 flex items-center justify-center gap-2
                   ${
                     ghost?.isValid &&
-                    (gameMode !== "online" || currentPlayer === myPlayer)
+                    (gameMode !== "online" || currentPlayer === myPlayer) &&
+                    (gameMode !== "ai" || currentPlayer !== aiPlayer)
                       ? "bg-emerald-600/90 hover:bg-emerald-500 active:bg-emerald-400 text-white cursor-pointer"
                       : "bg-gray-700/50 text-gray-400 cursor-not-allowed opacity-50"
                   }`}
@@ -1210,7 +1526,7 @@ function App() {
             </>
           ) : (
             <div className="w-full flex gap-3">
-              {gameMode === "local" ? (
+              {gameMode === "local" || gameMode === "ai" ? (
                 <button
                   onClick={handleReset}
                   className="w-full h-16 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white text-xl font-bold rounded-2xl shadow-xl transition-all transform hover:scale-[1.02] flex items-center justify-center gap-3"
