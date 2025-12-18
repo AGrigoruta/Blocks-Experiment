@@ -32,15 +32,20 @@ const rooms = new Map();
 //   blackName: string,
 //   spectators: [],
 //   whiteRematch: boolean,
-//   blackRematch: boolean
+//   blackRematch: boolean,
+//   timeSettings: { isTimed: boolean, initialTime: number, increment: number }
 // }
 
 io.on("connection", (socket) => {
   console.log("Client connected:", socket.id);
 
   socket.on("create_room", (data) => {
-    // Data might contain playerName
     const playerName = data?.playerName || "White";
+    const timeSettings = data?.timeSettings || {
+      isTimed: true,
+      initialTime: 300,
+      increment: 5,
+    };
     const roomId = Math.random().toString(36).substr(2, 4).toUpperCase();
 
     rooms.set(roomId, {
@@ -52,15 +57,18 @@ io.on("connection", (socket) => {
       spectators: [],
       whiteRematch: false,
       blackRematch: false,
+      timeSettings,
     });
 
     socket.join(roomId);
     socket.emit("room_created", { roomId });
-    console.log(`Room ${roomId} created by ${socket.id} (${playerName})`);
+    console.log(
+      `Room ${roomId} created by ${socket.id} (${playerName}) with time settings`,
+      timeSettings
+    );
   });
 
   socket.on("join_room", async (data) => {
-    // Support both old string format and new object format
     const roomId = typeof data === "string" ? data : data.roomId;
     const playerName = typeof data === "object" ? data.playerName : "Black";
 
@@ -71,13 +79,11 @@ io.on("connection", (socket) => {
       return;
     }
 
-    // If room has no black player, join as black
     if (!room.black) {
       room.black = socket.id;
       room.blackName = playerName;
       socket.join(roomId);
 
-      // Fetch stats for both players
       let whiteStats = null;
       let blackStats = null;
       try {
@@ -87,7 +93,6 @@ io.on("connection", (socket) => {
         console.error("Error fetching stats on game start:", err);
       }
 
-      // Notify everyone game starts
       io.to(roomId).emit("game_start", {
         whiteId: room.white,
         blackId: room.black,
@@ -95,20 +100,18 @@ io.on("connection", (socket) => {
         blackName: room.blackName,
         whiteStats,
         blackStats,
+        timeSettings: room.timeSettings,
       });
       console.log(
         `Game started in room ${roomId}. ${room.whiteName} vs ${room.blackName}`
       );
     } else {
-      // Room full
       socket.emit("error", { message: "Room is full" });
     }
   });
 
   socket.on("game_action", (payload) => {
     const { roomId, type, ...data } = payload;
-    // Relay to everyone else in the room
-    console.log(`Relaying action in room ${roomId}:`, type, data);
     socket.to(roomId).emit("game_action", { type, ...data });
   });
 
@@ -116,7 +119,6 @@ io.on("connection", (socket) => {
     const { roomId, message, playerName } = data;
     if (!roomId) return;
 
-    // Broadcast to room
     io.to(roomId).emit("receive_message", {
       sender: playerName,
       text: message,
@@ -132,12 +134,9 @@ io.on("connection", (socket) => {
     if (socket.id === room.white) room.whiteRematch = true;
     if (socket.id === room.black) room.blackRematch = true;
 
-    // Notify others that a rematch was requested
     socket.to(roomId).emit("rematch_requested");
 
-    // If both agreed
     if (room.whiteRematch && room.blackRematch) {
-      // Swap roles
       const tempId = room.white;
       room.white = room.black;
       room.black = tempId;
@@ -146,13 +145,9 @@ io.on("connection", (socket) => {
       room.whiteName = room.blackName;
       room.blackName = tempName;
 
-      // Reset flags
       room.whiteRematch = false;
       room.blackRematch = false;
 
-      console.log(`Rematch starting in room ${roomId}. Swapping roles.`);
-
-      // Fetch stats again (in case they updated after the last match)
       let whiteStats = null;
       let blackStats = null;
       try {
@@ -162,7 +157,6 @@ io.on("connection", (socket) => {
         console.error("Error fetching stats on rematch:", err);
       }
 
-      // Restart game with swapped roles
       io.to(roomId).emit("game_start", {
         whiteId: room.white,
         blackId: room.black,
@@ -170,6 +164,7 @@ io.on("connection", (socket) => {
         blackName: room.blackName,
         whiteStats,
         blackStats,
+        timeSettings: room.timeSettings,
       });
     }
   });
@@ -177,11 +172,9 @@ io.on("connection", (socket) => {
   socket.on("save_match", (matchData) => {
     saveMatch(matchData)
       .then((savedMatch) => {
-        console.log("Match saved:", savedMatch);
         socket.emit("match_saved", { success: true, matchId: savedMatch.id });
       })
       .catch((error) => {
-        console.error("Error saving match:", error);
         socket.emit("match_saved", { success: false, error: error.message });
       });
   });
@@ -197,7 +190,6 @@ io.on("connection", (socket) => {
         socket.emit("matches_data", { matches });
       })
       .catch((error) => {
-        console.error("Error fetching matches:", error);
         socket.emit("matches_data", { matches: [], error: error.message });
       });
   });
@@ -209,7 +201,6 @@ io.on("connection", (socket) => {
         socket.emit("player_stats", { stats });
       })
       .catch((error) => {
-        console.error("Error fetching player stats:", error);
         socket.emit("player_stats", { stats: null, error: error.message });
       });
   });
@@ -220,8 +211,6 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
-    console.log("Client disconnected:", socket.id);
-    // Find rooms this socket was in and clean up
     rooms.forEach((room, roomId) => {
       if (room.white === socket.id || room.black === socket.id) {
         handleDisconnect(socket, roomId);

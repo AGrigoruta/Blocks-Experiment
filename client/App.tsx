@@ -35,11 +35,13 @@ import {
   INITIAL_CAMERA_POSITION,
   INITIAL_TIME_SECONDS,
   INCREMENT_SECONDS,
+  TIME_PRESETS,
 } from "@/constants";
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
 const formatTime = (seconds: number) => {
+  if (seconds >= 999999) return "∞";
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return `${m}:${s.toString().padStart(2, "0")}`;
@@ -47,6 +49,117 @@ const formatTime = (seconds: number) => {
 
 const SERVER_URL =
   (import.meta as any).env?.VITE_SERVER_URL || "http://localhost:3000";
+
+// --- Time Selector Component ---
+const TimeControlSelector = ({
+  isTimed,
+  setIsTimed,
+  initialTime,
+  setInitialTime,
+  increment,
+  setIncrement,
+}: {
+  isTimed: boolean;
+  setIsTimed: (v: boolean) => void;
+  initialTime: number;
+  setInitialTime: (v: number) => void;
+  increment: number;
+  setIncrement: (v: number) => void;
+}) => {
+  const [customMinutes, setCustomMinutes] = useState(
+    Math.floor(initialTime / 60)
+  );
+  const [showCustom, setShowCustom] = useState(false);
+
+  return (
+    <div className="space-y-4 bg-gray-900/40 p-4 rounded-xl border border-gray-700">
+      <div className="flex items-center justify-between mb-2">
+        <label className="text-gray-400 text-xs uppercase tracking-widest font-bold">
+          Time Control
+        </label>
+        <button
+          onClick={() => setIsTimed(!isTimed)}
+          className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase transition ${
+            isTimed ? "bg-blue-600 text-white" : "bg-gray-700 text-gray-400"
+          }`}
+        >
+          {isTimed ? "Enabled" : "Unlimited"}
+        </button>
+      </div>
+
+      {isTimed && (
+        <div className="space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
+          <div className="grid grid-cols-4 gap-2">
+            {TIME_PRESETS.map((p) => (
+              <button
+                key={p.value}
+                onClick={() => {
+                  setInitialTime(p.value);
+                  setCustomMinutes(Math.floor(p.value / 60));
+                  setShowCustom(false);
+                }}
+                className={`py-2 text-xs font-bold rounded-lg border transition ${
+                  initialTime === p.value && !showCustom
+                    ? "bg-blue-600 border-blue-400 text-white"
+                    : "bg-gray-800 border-gray-700 text-gray-400 hover:bg-gray-700"
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+            <button
+              onClick={() => setShowCustom(true)}
+              className={`py-2 text-xs font-bold rounded-lg border transition ${
+                showCustom
+                  ? "bg-blue-600 border-blue-400 text-white"
+                  : "bg-gray-800 border-gray-700 text-gray-400 hover:bg-gray-700"
+              }`}
+            >
+              Custom
+            </button>
+          </div>
+
+          {showCustom && (
+            <div className="grid grid-cols-2 gap-3 animate-in fade-in duration-200">
+              <div>
+                <label className="block text-gray-500 text-[10px] uppercase mb-1">
+                  Minutes
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="999"
+                  value={customMinutes}
+                  onChange={(e) => {
+                    const val = Math.max(1, parseInt(e.target.value) || 1);
+                    setCustomMinutes(val);
+                    setInitialTime(val * 60);
+                  }}
+                  className="w-full bg-gray-800 border border-gray-700 text-white px-3 py-1.5 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-gray-500 text-[10px] uppercase mb-1">
+                  Bonus Time per Move (s)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="60"
+                  value={increment}
+                  onChange={(e) =>
+                    setIncrement(Math.max(0, parseInt(e.target.value) || 0))
+                  }
+                  className="w-full bg-gray-800 border border-gray-700 text-white px-3 py-1.5 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 // --- Player Card Modal ---
 const PlayerCardModal = ({
@@ -175,6 +288,12 @@ function App() {
   const [whiteStats, setWhiteStats] = useState<PlayerStats | null>(null);
   const [blackStats, setBlackStats] = useState<PlayerStats | null>(null);
 
+  // Time Settings State
+  const [isTimed, setIsTimed] = useState(true);
+  const [initialTimeSetting, setInitialTimeSetting] =
+    useState(INITIAL_TIME_SECONDS);
+  const [incrementSetting, setIncrementSetting] = useState(INCREMENT_SECONDS);
+
   // State for the modal
   const [viewStatsPlayer, setViewStatsPlayer] = useState<Player | null>(null);
   const hasShownStatsRef = useRef(false);
@@ -237,7 +356,6 @@ function App() {
   // Save match to database when game ends
   useEffect(() => {
     if (winner && gameStartTime) {
-      // Only save once: in local mode or if we're the white player in online mode
       const shouldSave =
         gameMode === "local" ||
         gameMode === "ai" ||
@@ -250,7 +368,6 @@ function App() {
         (matchEndTime - gameStartTime) / 1000
       );
 
-      // Count blocks for each player
       const whiteBlocks = blocks.filter((b) => b.player === "white").length;
       const blackBlocks = blocks.filter((b) => b.player === "black").length;
 
@@ -271,14 +388,13 @@ function App() {
               ? myName
               : "AI"
             : blackName,
-        winner: winner, // "white", "black", or "draw"
-        matchTime: matchDurationSeconds, // in seconds
+        winner: winner,
+        matchTime: matchDurationSeconds,
         whiteNumberOfBlocks: whiteBlocks,
         blackNumberOfBlocks: blackBlocks,
         matchEndTimestamp: new Date(matchEndTime).toISOString(),
       };
 
-      // Connect socket if needed for local games
       if (
         (gameMode === "local" || gameMode === "ai") &&
         !socketRef.current?.connected
@@ -286,11 +402,9 @@ function App() {
         const socket = connectSocket();
         socket.once("connect", () => {
           socket.emit("save_match", matchData);
-          console.log("Match saved (local/ai):", matchData);
         });
       } else if (socketRef.current?.connected) {
         socketRef.current.emit("save_match", matchData);
-        console.log("Match saved:", matchData);
       }
     }
   }, [
@@ -308,7 +422,8 @@ function App() {
   ]);
 
   useEffect(() => {
-    if (winner || isInLobby || showLocalSetup || showAISetup) return;
+    if (winner || isInLobby || showLocalSetup || showAISetup || !isTimed)
+      return;
     const interval = setInterval(() => {
       const active = currentPlayerRef.current;
       if (active === "white") {
@@ -331,7 +446,7 @@ function App() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [winner, isInLobby, showLocalSetup, showAISetup]);
+  }, [winner, isInLobby, showLocalSetup, showAISetup, isTimed]);
 
   // AI Turn Logic
   useEffect(() => {
@@ -347,7 +462,6 @@ function App() {
         if (bestMove) {
           handleAIPlace(bestMove);
         } else {
-          // AI has no moves, check for draw or win for other
           const otherPlayer = aiPlayer === "white" ? "black" : "white";
           if (!hasValidMove(grid, otherPlayer)) {
             setWinner("draw");
@@ -356,7 +470,7 @@ function App() {
           }
         }
         setIsAiThinking(false);
-      }, 800); // Small delay to feel natural
+      }, 800);
       return () => clearTimeout(timer);
     }
   }, [
@@ -369,11 +483,9 @@ function App() {
     aiDifficulty,
   ]);
 
-  // Auto-show opponent stats on game start (only once)
   useEffect(() => {
     if (gameMode === "online" && !isInLobby && !hasShownStatsRef.current) {
       const opponent = myPlayer === "white" ? "black" : "white";
-      // Only show if we have stats for them
       if (opponent === "white" && whiteStats) {
         setViewStatsPlayer("white");
         hasShownStatsRef.current = true;
@@ -406,7 +518,6 @@ function App() {
     });
 
     socket.on("connect_error", (err) => {
-      console.error("Socket connection error:", err);
       setErrorMessage(
         "Could not connect to game server. Is 'node server.js' running?"
       );
@@ -418,7 +529,7 @@ function App() {
       setConnectionStatus("waiting");
       setNetworkRole("host");
       setMyPlayer("white");
-      setChatMessages([]); // Clear chat when creating a new room
+      setChatMessages([]);
       setWhiteStats(null);
       setBlackStats(null);
       hasShownStatsRef.current = false;
@@ -433,8 +544,8 @@ function App() {
         blackName: sBlackName,
         whiteStats: wStats,
         blackStats: bStats,
+        timeSettings,
       }) => {
-        console.log("Game Started!", sWhiteName, sBlackName);
         setConnectionStatus("connected");
         setIsInLobby(false);
 
@@ -443,7 +554,14 @@ function App() {
         setWhiteStats(wStats);
         setBlackStats(bStats);
 
-        hasShownStatsRef.current = false; // Allow auto-show for new game
+        // Apply time settings from server
+        if (timeSettings) {
+          setIsTimed(timeSettings.isTimed);
+          setInitialTimeSetting(timeSettings.initialTime);
+          setIncrementSetting(timeSettings.increment);
+        }
+
+        hasShownStatsRef.current = false;
 
         if (socket.id === blackId) {
           setNetworkRole("client");
@@ -456,7 +574,7 @@ function App() {
         setRematchRequested(false);
         setOpponentRematchRequested(false);
 
-        internalReset();
+        internalResetWithSettings(timeSettings);
       }
     );
 
@@ -503,7 +621,14 @@ function App() {
     }
     const socket = connectSocket();
     if (socket) {
-      socket.emit("create_room", { playerName: myName });
+      socket.emit("create_room", {
+        playerName: myName,
+        timeSettings: {
+          isTimed,
+          initialTime: initialTimeSetting,
+          increment: incrementSetting,
+        },
+      });
       setWhiteScore(0);
       setBlackScore(0);
     }
@@ -652,6 +777,8 @@ function App() {
     myPlayer,
     whiteTime,
     blackTime,
+    isTimed,
+    incrementSetting,
     isAiThinking,
   ]);
 
@@ -668,11 +795,13 @@ function App() {
 
     let newWhiteTime = whiteTime;
     let newBlackTime = blackTime;
-    if (currentPlayer === "white") newWhiteTime += INCREMENT_SECONDS;
-    else newBlackTime += INCREMENT_SECONDS;
+    if (isTimed) {
+      if (currentPlayer === "white") newWhiteTime += incrementSetting;
+      else newBlackTime += incrementSetting;
 
-    if (currentPlayer === "white") setWhiteTime(newWhiteTime);
-    else setBlackTime(newBlackTime);
+      if (currentPlayer === "white") setWhiteTime(newWhiteTime);
+      else setBlackTime(newBlackTime);
+    }
 
     const winResult = checkWin(newGrid, currentPlayer);
     let nextPlayer: Player = currentPlayer === "white" ? "black" : "white";
@@ -715,8 +844,24 @@ function App() {
     setWinningCells(null);
     setOrientation("vertical");
     setHoverX(null);
-    setWhiteTime(INITIAL_TIME_SECONDS);
-    setBlackTime(INITIAL_TIME_SECONDS);
+    const startVal = isTimed ? initialTimeSetting : 999999;
+    setWhiteTime(startVal);
+    setBlackTime(startVal);
+    setGameStartTime(Date.now());
+    setIsAiThinking(false);
+  };
+
+  const internalResetWithSettings = (settings?: any) => {
+    const timeToSet = settings?.isTimed ? settings.initialTime : 999999;
+    setGrid(createEmptyGrid());
+    setBlocks([]);
+    setCurrentPlayer("white");
+    setWinner(null);
+    setWinningCells(null);
+    setOrientation("vertical");
+    setHoverX(null);
+    setWhiteTime(timeToSet);
+    setBlackTime(timeToSet);
     setGameStartTime(Date.now());
     setIsAiThinking(false);
   };
@@ -796,30 +941,41 @@ function App() {
             Local Game Setup
           </h2>
           <div className="space-y-4 mb-6">
-            <div>
-              <label className="block text-gray-400 text-sm mb-1">
-                White Player (First)
-              </label>
-              <input
-                type="text"
-                value={localWhiteName}
-                onChange={(e) => setLocalWhiteName(e.target.value)}
-                className="w-full bg-gray-900 border border-gray-600 text-white px-4 py-2 rounded-lg focus:outline-none focus:border-amber-500"
-                placeholder="Enter name"
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-gray-400 text-xs uppercase tracking-widest font-bold mb-1">
+                  White (1st)
+                </label>
+                <input
+                  type="text"
+                  value={localWhiteName}
+                  onChange={(e) => setLocalWhiteName(e.target.value)}
+                  className="w-full bg-gray-900 border border-gray-600 text-white px-4 py-2 rounded-lg focus:outline-none focus:border-amber-500"
+                  placeholder="Player 1"
+                />
+              </div>
+              <div>
+                <label className="block text-gray-400 text-xs uppercase tracking-widest font-bold mb-1">
+                  Black (2nd)
+                </label>
+                <input
+                  type="text"
+                  value={localBlackName}
+                  onChange={(e) => setLocalBlackName(e.target.value)}
+                  className="w-full bg-gray-900 border border-gray-600 text-white px-4 py-2 rounded-lg focus:outline-none focus:border-amber-500"
+                  placeholder="Player 2"
+                />
+              </div>
             </div>
-            <div>
-              <label className="block text-gray-400 text-sm mb-1">
-                Black Player
-              </label>
-              <input
-                type="text"
-                value={localBlackName}
-                onChange={(e) => setLocalBlackName(e.target.value)}
-                className="w-full bg-gray-900 border border-gray-600 text-white px-4 py-2 rounded-lg focus:outline-none focus:border-amber-500"
-                placeholder="Enter name"
-              />
-            </div>
+
+            <TimeControlSelector
+              isTimed={isTimed}
+              setIsTimed={setIsTimed}
+              initialTime={initialTimeSetting}
+              setInitialTime={setInitialTimeSetting}
+              increment={incrementSetting}
+              setIncrement={setIncrementSetting}
+            />
           </div>
 
           <div className="flex gap-3">
@@ -849,57 +1005,66 @@ function App() {
             Solo Challenge
           </h2>
 
-          <div className="space-y-6 mb-8">
-            <div>
-              <label className="block text-gray-400 text-xs uppercase tracking-widest font-bold mb-3">
-                Difficulty
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                {(["easy", "medium", "hard"] as AIDifficulty[]).map((d) => (
+          <div className="space-y-4 mb-8">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-gray-400 text-xs uppercase tracking-widest font-bold mb-2">
+                  Difficulty
+                </label>
+                <div className="flex flex-col gap-1">
+                  {(["easy", "medium", "hard"] as AIDifficulty[]).map((d) => (
+                    <button
+                      key={d}
+                      onClick={() => setAIDifficulty(d)}
+                      className={`py-2 text-[10px] font-bold rounded-lg border transition uppercase tracking-tighter ${
+                        aiDifficulty === d
+                          ? "bg-indigo-600 border-indigo-400 text-white shadow-lg"
+                          : "bg-gray-900 border-gray-700 text-gray-500 hover:bg-gray-700"
+                      }`}
+                    >
+                      {d}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-gray-400 text-xs uppercase tracking-widest font-bold mb-2">
+                  Play As
+                </label>
+                <div className="flex flex-col gap-1">
                   <button
-                    key={d}
-                    onClick={() => setAIDifficulty(d)}
-                    className={`py-2 text-xs font-bold rounded-lg border transition uppercase tracking-tighter ${
-                      aiDifficulty === d
-                        ? "bg-indigo-600 border-indigo-400 text-white shadow-lg"
-                        : "bg-gray-700 border-gray-600 text-gray-400 hover:bg-gray-600"
+                    onClick={() => setAIPlayer("black")}
+                    className={`py-2 text-[10px] rounded-lg border flex items-center justify-center gap-2 transition font-bold uppercase ${
+                      aiPlayer === "black"
+                        ? "bg-amber-600 border-amber-400 text-white shadow-lg"
+                        : "bg-gray-900 border-gray-700 text-gray-500 hover:bg-gray-700"
                     }`}
                   >
-                    {d}
+                    White
                   </button>
-                ))}
+                  <button
+                    onClick={() => setAIPlayer("white")}
+                    className={`py-2 text-[10px] rounded-lg border flex items-center justify-center gap-2 transition font-bold uppercase ${
+                      aiPlayer === "white"
+                        ? "bg-neutral-600 border-neutral-400 text-white shadow-lg"
+                        : "bg-gray-900 border-gray-700 text-gray-500 hover:bg-gray-700"
+                    }`}
+                  >
+                    Black
+                  </button>
+                </div>
               </div>
             </div>
 
-            <div>
-              <label className="block text-gray-400 text-xs uppercase tracking-widest font-bold mb-3">
-                Play As
-              </label>
-              <div className="grid grid-cols-2 gap-4">
-                <button
-                  onClick={() => setAIPlayer("black")}
-                  className={`py-3 rounded-xl border flex items-center justify-center gap-2 transition ${
-                    aiPlayer === "black"
-                      ? "bg-amber-600 border-amber-400 text-white"
-                      : "bg-gray-700 border-gray-600 text-gray-400 hover:bg-gray-600"
-                  }`}
-                >
-                  <div className="w-3 h-3 rounded-full bg-amber-200"></div>
-                  White (1st)
-                </button>
-                <button
-                  onClick={() => setAIPlayer("white")}
-                  className={`py-3 rounded-xl border flex items-center justify-center gap-2 transition ${
-                    aiPlayer === "white"
-                      ? "bg-neutral-900 border-neutral-600 text-white"
-                      : "bg-gray-700 border-gray-600 text-gray-400 hover:bg-gray-600"
-                  }`}
-                >
-                  <div className="w-3 h-3 rounded-full bg-neutral-950 border border-white/20"></div>
-                  Black (2nd)
-                </button>
-              </div>
-            </div>
+            <TimeControlSelector
+              isTimed={isTimed}
+              setIsTimed={setIsTimed}
+              initialTime={initialTimeSetting}
+              setInitialTime={setInitialTimeSetting}
+              increment={incrementSetting}
+              setIncrement={setIncrementSetting}
+            />
 
             <div>
               <label className="block text-gray-400 text-xs uppercase tracking-widest font-bold mb-2">
@@ -974,57 +1139,59 @@ function App() {
           </div>
 
           <div className="space-y-4">
-            <button
-              onClick={() => setShowAISetup(true)}
-              className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition shadow-lg flex items-center justify-center gap-2"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-6 w-6"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                onClick={() => setShowAISetup(true)}
+                className="py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition shadow-lg flex flex-col items-center justify-center gap-2"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                />
-              </svg>
-              Solo (vs AI)
-            </button>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-6 w-6"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                  />
+                </svg>
+                <span className="text-xs uppercase">Solo (AI)</span>
+              </button>
 
-            <button
-              onClick={() => setShowLocalSetup(true)}
-              className="w-full py-4 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl transition shadow-lg flex items-center justify-center gap-2"
-            >
-              <svg
-                className="w-6 h-6"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
+              <button
+                onClick={() => setShowLocalSetup(true)}
+                className="py-4 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl transition shadow-lg flex flex-col items-center justify-center gap-2"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M19 14l-7 7m0 0l-7-7m7 7V3"
-                />
-              </svg>
-              Pass & Play (Local)
-            </button>
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 14l-7 7m0 0l-7-7m7 7V3"
+                  />
+                </svg>
+                <span className="text-xs uppercase">Local</span>
+              </button>
+            </div>
 
             <div className="relative flex py-2 items-center">
               <div className="flex-grow border-t border-gray-700"></div>
-              <span className="flex-shrink mx-4 text-gray-500 text-sm">
-                Online Multiplayer
+              <span className="flex-shrink mx-4 text-gray-500 text-[10px] uppercase tracking-widest font-bold">
+                Multiplayer
               </span>
               <div className="flex-grow border-t border-gray-700"></div>
             </div>
 
             <div className="mb-2">
-              <label className="block text-gray-400 text-xs mb-1 ml-1">
+              <label className="block text-gray-400 text-xs mb-1 ml-1 uppercase font-bold tracking-tighter">
                 Your Name
               </label>
               <input
@@ -1044,7 +1211,16 @@ function App() {
             )}
 
             {connectionStatus === "idle" || connectionStatus === "error" ? (
-              <>
+              <div className="space-y-4">
+                <TimeControlSelector
+                  isTimed={isTimed}
+                  setIsTimed={setIsTimed}
+                  initialTime={initialTimeSetting}
+                  setInitialTime={setInitialTimeSetting}
+                  increment={incrementSetting}
+                  setIncrement={setIncrementSetting}
+                />
+
                 <button
                   onClick={() => {
                     setGameMode("online");
@@ -1078,7 +1254,7 @@ function App() {
                     Join
                   </button>
                 </div>
-              </>
+              </div>
             ) : (
               <div className="text-center py-6 bg-gray-900 rounded-xl border border-gray-700 animate-in fade-in zoom-in duration-300">
                 {networkRole === "host" ? (
@@ -1118,10 +1294,8 @@ function App() {
 
   return (
     <div className="relative w-full h-[100dvh] bg-gray-900 font-sans select-none overflow-hidden touch-none">
-      {/* Components Overlay */}
       <Tutorial isOpen={showTutorial} onClose={() => setShowTutorial(false)} />
 
-      {/* Player Stats Modal */}
       {viewStatsPlayer && (
         <PlayerCardModal
           player={viewStatsPlayer}
@@ -1206,7 +1380,7 @@ function App() {
                   whiteTime < 30 ? "text-red-400" : "text-white"
                 }`}
               >
-                {formatTime(whiteTime)}
+                {isTimed ? formatTime(whiteTime) : "∞"}
               </span>
               {(gameMode === "online" || gameMode === "ai") && (
                 <span className="text-[10px] text-gray-500 uppercase">
@@ -1280,7 +1454,7 @@ function App() {
                   blackTime < 30 ? "text-red-400" : "text-white"
                 }`}
               >
-                {formatTime(blackTime)}
+                {isTimed ? formatTime(blackTime) : "∞"}
               </span>
               {(gameMode === "online" || gameMode === "ai") && (
                 <span className="text-[10px] text-gray-500 uppercase">
@@ -1310,7 +1484,6 @@ function App() {
         </div>
 
         <div className="pointer-events-auto flex gap-2">
-          {/* In-Game Help Button */}
           <button
             onClick={() => setShowTutorial(true)}
             className="w-10 h-10 flex items-center justify-center bg-gray-800/80 hover:bg-gray-700 text-blue-400 rounded-lg transition border border-gray-700 backdrop-blur-md"
@@ -1358,7 +1531,7 @@ function App() {
       {winner && (
         <div className="absolute top-28 left-1/2 transform -translate-x-1/2 pointer-events-none z-20 animate-in fade-in zoom-in duration-500">
           <div className="bg-gradient-to-br from-green-500/90 to-emerald-600/90 backdrop-blur-md px-10 py-6 rounded-2xl shadow-2xl border-2 border-green-300/50 flex flex-col items-center">
-            <h2 className="text-4xl md:text-6xl font-extrabold text-white drop-shadow-md whitespace-nowrap">
+            <h2 className="text-4xl md:text-6xl font-extrabold text-white drop-shadow-md whitespace-nowrap text-center">
               {winner === "draw"
                 ? "GAME DRAWN"
                 : `${
@@ -1370,9 +1543,9 @@ function App() {
             <div className="text-green-50 text-sm font-bold tracking-widest uppercase mt-2">
               {winner === "draw"
                 ? "NO MOVES POSSIBLE"
-                : whiteTime === 0 || blackTime === 0
+                : isTimed && (whiteTime === 0 || blackTime === 0)
                 ? "ON TIME"
-                : "BY CHECKMATE"}
+                : "BY CONNECT FIVE"}
             </div>
             {(gameMode === "online" || gameMode === "ai") &&
               winner !== "draw" &&
@@ -1570,7 +1743,7 @@ function App() {
                     }`}
                   >
                     {rematchRequested ? (
-                      <span>WAITING FOR OPPONENT...</span>
+                      <span>WAITING...</span>
                     ) : (
                       <>
                         <svg

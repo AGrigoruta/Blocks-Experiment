@@ -24,3 +24,9 @@ export const INITIAL_CAMERA_POSITION: [number, number, number] = [0, 10, 20];
 // Timer Settings
 export const INITIAL_TIME_SECONDS = 300; // 5 minutes
 export const INCREMENT_SECONDS = 5; // 5 seconds added per turn
+
+export const TIME_PRESETS = [
+  { label: "3m", value: 180 },
+  { label: "5m", value: 300 },
+  { label: "10m", value: 600 },
+];
