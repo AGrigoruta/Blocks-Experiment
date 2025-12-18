@@ -366,10 +366,8 @@ function App() {
   // Save match to database when game ends
   useEffect(() => {
     if (winner && gameStartTime) {
-      const shouldSave =
-        gameMode === "local" ||
-        gameMode === "ai" ||
-        (gameMode === "online" && myPlayer === "white");
+      // Only save multiplayer (online) games to the database
+      const shouldSave = gameMode === "online" && myPlayer === "white";
 
       if (!shouldSave) return;
 
@@ -382,22 +380,8 @@ function App() {
       const blackBlocks = blocks.filter((b) => b.player === "black").length;
 
       const matchData = {
-        whiteName:
-          gameMode === "local"
-            ? localWhiteName
-            : gameMode === "ai"
-            ? aiPlayer === "black"
-              ? myName
-              : "AI"
-            : whiteName,
-        blackName:
-          gameMode === "local"
-            ? localBlackName
-            : gameMode === "ai"
-            ? aiPlayer === "white"
-              ? myName
-              : "AI"
-            : blackName,
+        whiteName: whiteName,
+        blackName: blackName,
         winner: winner,
         matchTime: matchDurationSeconds,
         whiteNumberOfBlocks: whiteBlocks,
@@ -405,17 +389,7 @@ function App() {
         matchEndTimestamp: new Date(matchEndTime).toISOString(),
       };
 
-      // Don't save games with AI opponents
-      if (gameMode === "ai") {
-        return;
-      }
-
-      if (gameMode === "local" && !socketRef.current?.connected) {
-        const socket = connectSocket();
-        socket.once("connect", () => {
-          socket.emit("save_match", matchData);
-        });
-      } else if (socketRef.current?.connected) {
+      if (socketRef.current?.connected) {
         socketRef.current.emit("save_match", matchData);
       }
     }

@@ -235,26 +235,27 @@ export const getBestMove = (
   // Medium or Hard: Use minimax with appropriate depth
   // Add randomness based on difficulty
   const depth = difficulty === "easy" ? 1 : difficulty === "medium" ? 2 : 4; // Increased hard depth
-  const randomnessFactor = difficulty === "easy" ? 0.3 : difficulty === "medium" ? 0.15 : 0.05;
-  
+  const randomnessFactor =
+    difficulty === "easy" ? 0.3 : difficulty === "medium" ? 0.15 : 0.05;
+
   const topMoves: { move: BlockData; score: number }[] = [];
 
   for (const move of shuffledMoves) {
     const newGrid = applyBlockToGrid(grid, move);
     const score = minimax(newGrid, depth, false, player, -Infinity, Infinity);
-    
+
     // Collect all moves with similar scores
     topMoves.push({ move, score });
   }
 
   // Sort by score descending
   topMoves.sort((a, b) => b.score - a.score);
-  
+
   // Always ensure we have at least one move
   if (topMoves.length === 0) {
     return shuffledMoves[0];
   }
-  
+
   const bestScore = topMoves[0].score;
 
   // For medium difficulty, add randomness by considering top moves within a threshold
@@ -262,7 +263,7 @@ export const getBestMove = (
     // Use absolute difference for threshold to handle negative scores correctly
     const scoreDiff = Math.abs(bestScore * 0.1); // 10% difference
     const goodMoves = topMoves.filter((m) => m.score >= bestScore - scoreDiff);
-    
+
     if (goodMoves.length > 1 && Math.random() < randomnessFactor * 2) {
       // 30% chance to pick a random good move instead of the best
       return goodMoves[Math.floor(Math.random() * goodMoves.length)].move;
@@ -274,11 +275,15 @@ export const getBestMove = (
   if (difficulty === "hard") {
     // Use absolute difference for threshold to handle negative scores correctly
     const scoreDiff = Math.abs(bestScore * 0.05); // 5% difference
-    const topCandidates = topMoves.filter((m) => m.score >= bestScore - scoreDiff);
-    
+    const topCandidates = topMoves.filter(
+      (m) => m.score >= bestScore - scoreDiff
+    );
+
     if (topCandidates.length > 1 && Math.random() < randomnessFactor) {
       // Small chance to add variety even on hard
-      return topCandidates[Math.floor(Math.random() * Math.min(topCandidates.length, 2))].move;
+      return topCandidates[
+        Math.floor(Math.random() * Math.min(topCandidates.length, 2))
+      ].move;
     }
   }
 
