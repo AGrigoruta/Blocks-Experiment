@@ -70,6 +70,8 @@ const rooms = new Map();
 // Room Structure:
 // {
 //   id: string,
+//   isPrivate: boolean,
+//   roomCode: string (only for private rooms),
 //   white: socketId,
 //   whiteName: string,
 //   black: socketId,
@@ -77,7 +79,8 @@ const rooms = new Map();
 //   spectators: [],
 //   whiteRematch: boolean,
 //   blackRematch: boolean,
-//   timeSettings: { isTimed: boolean, initialTime: number, increment: number }
+//   timeSettings: { isTimed: boolean, initialTime: number, increment: number },
+//   createdAt: timestamp
 // }
 
 io.on("connection", (socket) => {
@@ -85,15 +88,21 @@ io.on("connection", (socket) => {
 
   socket.on("create_room", (data) => {
     const playerName = data?.playerName || "White";
+    const isPrivate = data?.isPrivate || false;
     const timeSettings = data?.timeSettings || {
       isTimed: true,
       initialTime: 300,
       increment: 5,
     };
     const roomId = Math.random().toString(36).substr(2, 4).toUpperCase();
+    const roomCode = isPrivate
+      ? Math.random().toString(36).substr(2, 4).toUpperCase()
+      : null;
 
     rooms.set(roomId, {
       id: roomId,
+      isPrivate,
+      roomCode,
       white: socket.id,
       whiteName: playerName,
       black: null,
@@ -102,24 +111,47 @@ io.on("connection", (socket) => {
       whiteRematch: false,
       blackRematch: false,
       timeSettings,
+      createdAt: Date.now(),
     });
 
     socket.join(roomId);
-    socket.emit("room_created", { roomId });
+    socket.emit("room_created", { roomId, roomCode });
     console.log(
-      `Room ${roomId} created by ${socket.id} (${playerName}) with time settings`,
+      `Room ${roomId} created by ${socket.id} (${playerName}) - ${
+        isPrivate ? "Private" : "Public"
+      } with time settings`,
       timeSettings
     );
+
+    // Broadcast updated room list to all clients
+    broadcastRoomList();
+  });
+
+  socket.on("get_rooms", () => {
+    sendRoomList(socket);
   });
 
   socket.on("join_room", async (data) => {
     const roomId = typeof data === "string" ? data : data.roomId;
     const playerName = typeof data === "object" ? data.playerName : "Black";
+    const roomCode = typeof data === "object" ? data.roomCode : null;
 
     const room = rooms.get(roomId);
 
     if (!room) {
       socket.emit("error", { message: "Room not found" });
+      return;
+    }
+
+    // Check if joining player has the same name as the host
+    if (room.whiteName.toLowerCase() === playerName.toLowerCase()) {
+      socket.emit("error", { message: "You cannot use the same name as the host" });
+      return;
+    }
+
+    // Check if room is private and room code is required
+    if (room.isPrivate && room.roomCode !== roomCode) {
+      socket.emit("error", { message: "Invalid room code" });
       return;
     }
 
@@ -149,6 +181,9 @@ io.on("connection", (socket) => {
       console.log(
         `Game started in room ${roomId}. ${room.whiteName} vs ${room.blackName}`
       );
+
+      // Broadcast updated room list to all clients
+      broadcastRoomList();
     } else {
       socket.emit("error", { message: "Room is full" });
     }
@@ -269,5 +304,38 @@ function handleDisconnect(socket, roomId) {
     io.to(roomId).emit("opponent_left");
     rooms.delete(roomId);
     console.log(`Room ${roomId} closed due to disconnect`);
+
+    // Broadcast updated room list to all clients
+    broadcastRoomList();
   }
+}
+
+function sendRoomList(socket) {
+  const roomList = Array.from(rooms.values())
+    .filter((room) => !room.black) // Only show rooms waiting for players
+    .map((room) => ({
+      roomId: room.id,
+      hostName: room.whiteName,
+      isPrivate: room.isPrivate,
+      playerCount: room.black ? 2 : 1,
+      maxPlayers: 2,
+      timeSettings: room.timeSettings,
+    }));
+
+  socket.emit("room_list", { rooms: roomList });
+}
+
+function broadcastRoomList() {
+  const roomList = Array.from(rooms.values())
+    .filter((room) => !room.black) // Only show rooms waiting for players
+    .map((room) => ({
+      roomId: room.id,
+      hostName: room.whiteName,
+      isPrivate: room.isPrivate,
+      playerCount: room.black ? 2 : 1,
+      maxPlayers: 2,
+      timeSettings: room.timeSettings,
+    }));
+
+  io.emit("room_list", { rooms: roomList });
 }

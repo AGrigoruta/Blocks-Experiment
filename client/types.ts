@@ -52,6 +52,25 @@ export interface LeaderboardEntry {
   winRate: number;
 }
 
+export interface RoomInfo {
+  roomId: string;
+  hostName: string;
+  isPrivate: boolean;
+  playerCount: number;
+  maxPlayers: number;
+  timeSettings: {
+    isTimed: boolean;
+    initialTime: number;
+    increment: number;
+  };
+}
+
+export interface TimeSettings {
+  isTimed: boolean;
+  initialTime: number;
+  increment: number;
+}
+
 // --- Network Types ---
 
 export type GameMode = "local" | "online" | "ai";

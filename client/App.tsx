@@ -11,6 +11,7 @@ import { GameScene } from "@/components/GameScene";
 import { Chat, ChatMessage } from "@/components/Chat";
 import { Tutorial } from "@/components/Tutorial";
 import { LeaderboardModal } from "@/components/LeaderboardModal";
+import { LobbyModal, RoomInfo } from "@/components/LobbyModal";
 import {
   createEmptyGrid,
   findDropPosition,
@@ -289,6 +290,13 @@ function App() {
   const [whiteName, setWhiteName] = useState("White");
   const [blackName, setBlackName] = useState("Black");
 
+  // Lobby State
+  const [showLobby, setShowLobby] = useState(false);
+  const [rooms, setRooms] = useState<RoomInfo[]>([]);
+  const [isRoomsLoading, setIsRoomsLoading] = useState(false);
+  const [isCreatingPrivate, setIsCreatingPrivate] = useState(false);
+  const [hostRoomCode, setHostRoomCode] = useState<string | null>(null);
+
   const [whiteStats, setWhiteStats] = useState<PlayerStats | null>(null);
   const [blackStats, setBlackStats] = useState<PlayerStats | null>(null);
 
@@ -539,8 +547,9 @@ function App() {
       setConnectionStatus("error");
     });
 
-    socket.on("room_created", ({ roomId }) => {
+    socket.on("room_created", ({ roomId, roomCode }) => {
       setRoomId(roomId);
+      setHostRoomCode(roomCode);
       setConnectionStatus("waiting");
       setNetworkRole("host");
       setMyPlayer("white");
@@ -548,6 +557,11 @@ function App() {
       setWhiteStats(null);
       setBlackStats(null);
       hasShownStatsRef.current = false;
+    });
+
+    socket.on("room_list", ({ rooms: roomList }) => {
+      setRooms(roomList);
+      setIsRoomsLoading(false);
     });
 
     socket.on(
@@ -630,7 +644,7 @@ function App() {
     return socket;
   };
 
-  const startHost = () => {
+  const startHost = (isPrivate: boolean = false) => {
     if (!myName.trim()) {
       alert("Please enter your name first");
       return;
@@ -639,6 +653,7 @@ function App() {
     if (socket) {
       socket.emit("create_room", {
         playerName: myName,
+        isPrivate,
         timeSettings: {
           isTimed,
           initialTime: initialTimeSetting,
@@ -647,10 +662,11 @@ function App() {
       });
       setWhiteScore(0);
       setBlackScore(0);
+      setIsCreatingPrivate(isPrivate);
     }
   };
 
-  const joinGame = (inputRoomId: string) => {
+  const joinGame = (inputRoomId: string, roomCode?: string) => {
     if (!myName.trim()) {
       alert("Please enter your name first");
       return;
@@ -658,7 +674,11 @@ function App() {
     const socket = connectSocket();
     if (socket) {
       setRoomId(inputRoomId);
-      socket.emit("join_room", { roomId: inputRoomId, playerName: myName });
+      socket.emit("join_room", {
+        roomId: inputRoomId,
+        playerName: myName,
+        roomCode,
+      });
       setWhiteScore(0);
       setBlackScore(0);
       setChatMessages([]);
@@ -674,8 +694,84 @@ function App() {
     setConnectionStatus("idle");
     setNetworkRole(null);
     setRoomId("");
+    setHostRoomCode(null);
+    setIsCreatingPrivate(false);
     setPreviousLoser(null); // Reset for new game series
     setChatMessages([]);
+  };
+
+  const openLobby = () => {
+    if (!myName.trim()) {
+      alert("Please enter your name first");
+      return;
+    }
+    
+    // Open the lobby modal immediately
+    setShowLobby(true);
+    setIsRoomsLoading(true);
+    
+    // Connect socket if not already connected
+    let socket = socketRef.current;
+    if (!socket || !socket.connected) {
+      socket = io(SERVER_URL, {
+        transports: ["websocket"],
+        reconnectionAttempts: 5,
+      });
+      
+      socket.on("connect", () => {
+        console.log("Connected to server for lobby", socket.id);
+        socket.emit("get_rooms");
+      });
+      
+      socket.on("room_list", ({ rooms: roomList }) => {
+        console.log("Received room list:", roomList);
+        setRooms(roomList);
+        setIsRoomsLoading(false);
+      });
+      
+      socket.on("connect_error", (err) => {
+        console.error("Lobby connection error:", err);
+        setIsRoomsLoading(false);
+      });
+      
+      socketRef.current = socket;
+    } else {
+      // Socket already connected, just request rooms
+      socket.emit("get_rooms");
+    }
+    
+    // Auto-refresh room list every 3 seconds
+    const interval = setInterval(() => {
+      if (socketRef.current?.connected) {
+        socketRef.current.emit("get_rooms");
+      }
+    }, 3000);
+    
+    // Store interval ID to clear it later
+    (socket as any)._lobbyInterval = interval;
+  };
+
+  const closeLobby = () => {
+    setShowLobby(false);
+    setRooms([]);
+    
+    // Clear lobby refresh interval
+    if (socketRef.current && (socketRef.current as any)._lobbyInterval) {
+      clearInterval((socketRef.current as any)._lobbyInterval);
+      delete (socketRef.current as any)._lobbyInterval;
+    }
+    
+    // If we're in idle state and not hosting/joining, disconnect the lobby socket
+    if (connectionStatus === "idle" && socketRef.current) {
+      socketRef.current.disconnect();
+      socketRef.current = null;
+    }
+  };
+
+  const handleJoinFromLobby = (roomId: string, roomCode?: string) => {
+    closeLobby();
+    setGameMode("online");
+    joinGame(roomId, roomCode);
   };
 
   const sendNetworkAction = (action: any) => {
@@ -1198,6 +1294,14 @@ function App() {
           isLoading={isLeaderboardLoading}
         />
 
+        <LobbyModal
+          isOpen={showLobby}
+          onClose={closeLobby}
+          rooms={rooms}
+          onJoinRoom={handleJoinFromLobby}
+          isLoading={isRoomsLoading}
+        />
+
         {/* Main Menu */}
         <div className="max-w-md w-full bg-gray-800 p-8 rounded-3xl shadow-2xl border border-gray-700 relative overflow-hidden">
           {/* Subtle Background Accent */}
@@ -1341,81 +1445,132 @@ function App() {
                   setIncrement={setIncrementSetting}
                 />
 
-                <button
-                  onClick={() => {
-                    setGameMode("online");
-                    startHost();
-                  }}
-                  className="w-full py-4 bg-blue-700 hover:bg-blue-600 text-white font-black rounded-2xl transition shadow-xl flex items-center justify-center gap-3 border border-blue-400/20 group"
-                >
-                  <span className="bg-blue-400/20 p-1.5 rounded-lg group-hover:rotate-12 transition-transform">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="h-5 w-5"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                      />
-                    </svg>
-                  </span>
-                  HOST NEW MATCH
-                </button>
-
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="ROOM CODE"
-                    id="roomInput"
-                    maxLength={4}
-                    className="flex-1 bg-gray-900/50 border border-gray-700 text-white px-4 rounded-2xl uppercase tracking-[0.3em] text-center font-bold focus:outline-none focus:border-blue-500"
-                  />
+                <div className="grid grid-cols-2 gap-3">
                   <button
                     onClick={() => {
-                      const val = (
-                        document.getElementById("roomInput") as HTMLInputElement
-                      ).value.toUpperCase();
-                      if (val.length >= 4) {
-                        setGameMode("online");
-                        joinGame(val);
-                      }
+                      setGameMode("online");
+                      startHost(false);
                     }}
-                    className="px-8 py-4 bg-gray-700 hover:bg-gray-600 text-white font-black rounded-2xl transition border border-gray-600/50"
+                    className="py-4 bg-blue-700 hover:bg-blue-600 text-white font-black rounded-2xl transition shadow-xl flex flex-col items-center justify-center gap-2 border border-blue-400/20 group"
                   >
-                    JOIN
+                    <span className="bg-blue-400/20 p-1.5 rounded-lg group-hover:rotate-12 transition-transform">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-5 w-5"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                        />
+                      </svg>
+                    </span>
+                    <span className="text-xs uppercase tracking-widest">
+                      Public Game
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setGameMode("online");
+                      startHost(true);
+                    }}
+                    className="py-4 bg-amber-700 hover:bg-amber-600 text-white font-black rounded-2xl transition shadow-xl flex flex-col items-center justify-center gap-2 border border-amber-400/20 group"
+                  >
+                    <span className="bg-amber-400/20 p-1.5 rounded-lg group-hover:rotate-12 transition-transform">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-5 w-5"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                        />
+                      </svg>
+                    </span>
+                    <span className="text-xs uppercase tracking-widest">
+                      Private Game
+                    </span>
                   </button>
                 </div>
+
+                <button
+                  onClick={openLobby}
+                  className="w-full py-4 bg-gradient-to-r from-purple-700 to-blue-700 hover:from-purple-600 hover:to-blue-600 text-white font-black rounded-2xl transition shadow-xl flex items-center justify-center gap-3 border border-purple-400/20"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-5 w-5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
+                    />
+                  </svg>
+                  VIEW LOBBY
+                </button>
               </div>
             ) : (
               <div className="text-center py-10 bg-gray-900/80 rounded-2xl border border-blue-500/30 animate-in fade-in zoom-in duration-500 shadow-[0_0_40px_rgba(59,130,246,0.1)]">
                 {networkRole === "host" ? (
                   <div className="space-y-6">
                     <div className="space-y-1">
-                      <p className="text-blue-400 text-[10px] font-black uppercase tracking-[0.2em]">
-                        Ready to Build
+                      <p className="text-blue-400 text-[10px] font-black uppercase tracking-[0.2em] flex items-center justify-center gap-2">
+                        {isCreatingPrivate && (
+                          <span className="text-amber-400">🔒</span>
+                        )}
+                        {isCreatingPrivate ? "Private Game" : "Public Game"}
                       </p>
                       <p className="text-gray-400 text-xs">
                         Awaiting structural opponent...
                       </p>
                     </div>
-                    <div className="text-5xl text-white font-mono font-black tracking-[0.3em] bg-gray-950/80 py-4 rounded-2xl mx-6 border border-gray-800 shadow-inner">
-                      {roomId}
-                    </div>
+                    {isCreatingPrivate && hostRoomCode ? (
+                      <>
+                        <div className="text-5xl text-white font-mono font-black tracking-[0.3em] bg-gray-950/80 py-4 rounded-2xl mx-6 border border-gray-800 shadow-inner">
+                          {hostRoomCode}
+                        </div>
+                        <div className="text-xs text-gray-500 bg-amber-600/10 py-2 px-4 rounded-lg border border-amber-600/20 mx-6">
+                          Share this code with your opponent
+                        </div>
+                      </>
+                    ) : (
+                      <div className="py-8 mx-6">
+                        <div className="text-6xl mb-4 opacity-50">🌐</div>
+                        <p className="text-blue-400 text-lg font-bold">
+                          Visible in Lobby
+                        </p>
+                        <p className="text-gray-500 text-xs mt-2">
+                          Anyone can join your game
+                        </p>
+                      </div>
+                    )}
                     <div className="flex flex-col items-center gap-4">
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(roomId);
-                          alert("Room code copied!");
-                        }}
-                        className="text-blue-500 text-[10px] uppercase font-black hover:text-blue-400 transition tracking-widest bg-blue-500/10 px-4 py-2 rounded-full border border-blue-500/20"
-                      >
-                        Copy Code
-                      </button>
+                      {isCreatingPrivate && hostRoomCode && (
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(hostRoomCode);
+                            alert("Code copied!");
+                          }}
+                          className="text-amber-500 bg-amber-500/10 border-amber-500/20 text-[10px] uppercase font-black hover:text-opacity-80 transition tracking-widest px-4 py-2 rounded-full border"
+                        >
+                          Copy Code
+                        </button>
+                      )}
                       <button
                         onClick={cancelHosting}
                         className="text-red-500 text-[10px] uppercase font-black hover:text-red-400 transition tracking-widest"
@@ -1449,6 +1604,21 @@ function App() {
   return (
     <div className="relative w-full h-[100dvh] bg-gray-900 font-sans select-none overflow-hidden touch-none">
       <Tutorial isOpen={showTutorial} onClose={() => setShowTutorial(false)} />
+
+      <LeaderboardModal
+        isOpen={showLeaderboard}
+        onClose={() => setShowLeaderboard(false)}
+        entries={leaderboard}
+        isLoading={isLeaderboardLoading}
+      />
+
+      <LobbyModal
+        isOpen={showLobby}
+        onClose={closeLobby}
+        rooms={rooms}
+        onJoinRoom={handleJoinFromLobby}
+        isLoading={isRoomsLoading}
+      />
 
       {viewStatsPlayer && (
         <PlayerCardModal
