@@ -198,6 +198,78 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("spectate_room", (data) => {
+    const roomId = typeof data === "string" ? data : data.roomId;
+    const spectatorName = typeof data === "object" ? data.spectatorName : "Spectator";
+    const roomCode = typeof data === "object" ? data.roomCode : null;
+
+    const room = rooms.get(roomId);
+
+    if (!room) {
+      socket.emit("error", { message: "Room not found" });
+      return;
+    }
+
+    // Check if room is private and room code is required
+    if (room.isPrivate && room.roomCode !== roomCode) {
+      socket.emit("error", { message: "Invalid room code" });
+      return;
+    }
+
+    // Check if spectator name conflicts with existing players
+    if (room.whiteName && room.whiteName.toLowerCase() === spectatorName.toLowerCase()) {
+      socket.emit("error", {
+        message: "You cannot use the same name as an existing player",
+      });
+      return;
+    }
+    if (room.blackName && room.blackName.toLowerCase() === spectatorName.toLowerCase()) {
+      socket.emit("error", {
+        message: "You cannot use the same name as an existing player",
+      });
+      return;
+    }
+
+    // Check if spectator name conflicts with existing spectators
+    const existingSpectator = room.spectators.find(
+      spec => spec.name.toLowerCase() === spectatorName.toLowerCase()
+    );
+    if (existingSpectator) {
+      socket.emit("error", {
+        message: "A spectator with this name already exists in the room",
+      });
+      return;
+    }
+
+    // Add spectator to room
+    room.spectators.push({
+      id: socket.id,
+      name: spectatorName,
+    });
+
+    socket.join(roomId);
+
+    // Notify spectator they joined successfully
+    socket.emit("spectate_joined", {
+      roomId,
+      spectatorCount: room.spectators.length,
+      whiteName: room.whiteName,
+      blackName: room.blackName,
+      isGameInProgress: !!(room.white && room.black),
+      timeSettings: room.timeSettings,
+    });
+
+    // Notify all players and spectators about new spectator
+    socket.to(roomId).emit("spectator_joined", {
+      spectatorName,
+      spectatorCount: room.spectators.length,
+    });
+
+    console.log(
+      `Spectator ${spectatorName} (${socket.id}) joined room ${roomId}. Total spectators: ${room.spectators.length}`
+    );
+  });
+
   socket.on("game_action", (payload) => {
     const { roomId, type, ...data } = payload;
     socket.to(roomId).emit("game_action", { type, ...data });
@@ -318,10 +390,27 @@ io.on("connection", (socket) => {
     handleDisconnect(socket, roomId);
   });
 
+  socket.on("leave_spectate", (roomId) => {
+    const room = rooms.get(roomId);
+    if (room) {
+      const spectatorIndex = room.spectators.findIndex(spec => spec.id === socket.id);
+      if (spectatorIndex !== -1) {
+        socket.leave(roomId);
+        handleSpectatorDisconnect(socket, roomId, spectatorIndex);
+      }
+    }
+  });
+
   socket.on("disconnect", () => {
     rooms.forEach((room, roomId) => {
       if (room.white === socket.id || room.black === socket.id) {
         handleDisconnect(socket, roomId);
+      } else {
+        // Check if disconnecting socket is a spectator
+        const spectatorIndex = room.spectators.findIndex(spec => spec.id === socket.id);
+        if (spectatorIndex !== -1) {
+          handleSpectatorDisconnect(socket, roomId, spectatorIndex);
+        }
       }
     });
   });
@@ -339,16 +428,36 @@ function handleDisconnect(socket, roomId) {
   }
 }
 
+function handleSpectatorDisconnect(socket, roomId, spectatorIndex) {
+  const room = rooms.get(roomId);
+  if (room && spectatorIndex !== -1) {
+    const spectator = room.spectators[spectatorIndex];
+    room.spectators.splice(spectatorIndex, 1);
+
+    // Notify remaining players and spectators
+    socket.to(roomId).emit("spectator_left", {
+      spectatorName: spectator.name,
+      spectatorCount: room.spectators.length,
+    });
+
+    console.log(
+      `Spectator ${spectator.name} (${socket.id}) left room ${roomId}. Remaining spectators: ${room.spectators.length}`
+    );
+  }
+}
+
 function sendRoomList(socket) {
   const roomList = Array.from(rooms.values())
-    .filter((room) => !room.black) // Only show rooms waiting for players
+    .filter((room) => !room.isPrivate) // Show all public rooms (including full ones for spectating)
     .map((room) => ({
       roomId: room.id,
       hostName: room.whiteName,
       isPrivate: room.isPrivate,
       playerCount: room.black ? 2 : 1,
       maxPlayers: 2,
+      spectatorCount: room.spectators.length,
       timeSettings: room.timeSettings,
+      isGameInProgress: !!(room.white && room.black),
     }));
 
   socket.emit("room_list", { rooms: roomList });
@@ -356,14 +465,16 @@ function sendRoomList(socket) {
 
 function broadcastRoomList() {
   const roomList = Array.from(rooms.values())
-    .filter((room) => !room.black) // Only show rooms waiting for players
+    .filter((room) => !room.isPrivate) // Show all public rooms (including full ones for spectating)
     .map((room) => ({
       roomId: room.id,
       hostName: room.whiteName,
       isPrivate: room.isPrivate,
       playerCount: room.black ? 2 : 1,
       maxPlayers: 2,
+      spectatorCount: room.spectators.length,
       timeSettings: room.timeSettings,
+      isGameInProgress: !!(room.white && room.black),
     }));
 
   io.emit("room_list", { rooms: roomList });
