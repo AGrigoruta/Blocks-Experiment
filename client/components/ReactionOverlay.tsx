@@ -36,22 +36,22 @@ const ReactionItem: React.FC<{
       clearTimeout(fadeOutTimer);
       clearTimeout(completeTimer);
     };
-  }, [onComplete]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run once on mount
 
   return (
     <div
-      className={`transition-all duration-300 ${
-        isVisible ? "opacity-70 translate-x-0" : "opacity-0 translate-x-8"
-      }`}
+      className="transition-all duration-300"
       style={{
-        transform: `translateY(${index * 80}px)`,
+        opacity: isVisible ? 0.7 : 0,
+        transform: `translateY(${index * 80}px) translateX(${isVisible ? 0 : 32}px)`,
       }}
       role="status"
       aria-live="polite"
       aria-label={`${reaction.sender} sent reaction ${reaction.emoji}`}
     >
       <div className="flex items-center gap-3 bg-black/40 backdrop-blur-sm rounded-2xl px-4 py-3 shadow-xl border border-white/10">
-        <div className="text-5xl animate-in zoom-in-50 fade-in duration-200">
+        <div className="animate-in zoom-in-50 fade-in duration-200" style={{ fontSize: '48px' }}>
           {reaction.emoji}
         </div>
         <div className="text-white text-sm font-semibold max-w-[100px] truncate">
@@ -69,7 +69,7 @@ export const ReactionOverlay: React.FC<ReactionOverlayProps> = ({
   if (reactions.length === 0) return null;
 
   return (
-    <div className="fixed right-4 top-1/2 -translate-y-1/2 pointer-events-none z-30 flex flex-col gap-2">
+    <div className="fixed right-4 top-1/2 -translate-y-1/2 pointer-events-none z-30">
       {reactions.map((reaction, index) => (
         <ReactionItem
           key={reaction.id}
