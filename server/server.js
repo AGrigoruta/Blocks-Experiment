@@ -327,9 +327,34 @@ io.on("connection", (socket) => {
   });
 });
 
-function handleDisconnect(socket, roomId) {
+async function handleDisconnect(socket, roomId) {
   const room = rooms.get(roomId);
   if (room) {
+    // Check if game was in progress (both players joined)
+    if (room.white && room.black) {
+      // Determine who disconnected and who is the winner
+      const disconnectedPlayer = socket.id === room.white ? "white" : "black";
+      const winner = disconnectedPlayer === "white" ? "black" : "white";
+      
+      // Save match to database with disconnecting player as loser
+      const matchData = {
+        whiteName: room.whiteName,
+        blackName: room.blackName,
+        winner: winner,
+        matchTime: 0, // Unknown time for disconnected games
+        whiteNumberOfBlocks: 0, // Unknown block count
+        blackNumberOfBlocks: 0, // Unknown block count
+        matchEndTimestamp: new Date().toISOString(),
+      };
+      
+      try {
+        await saveMatch(matchData);
+        console.log(`Match saved due to ${disconnectedPlayer} disconnect. Winner: ${winner}`);
+      } catch (error) {
+        console.error("Error saving match on disconnect:", error);
+      }
+    }
+    
     io.to(roomId).emit("opponent_left");
     rooms.delete(roomId);
     console.log(`Room ${roomId} closed due to disconnect`);
