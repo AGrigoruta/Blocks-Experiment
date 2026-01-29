@@ -731,62 +731,64 @@ function App() {
 
   // Render game
   return (
-    <GameView
-      blocks={gameState.blocks}
-      currentPlayer={gameState.currentPlayer}
-      winner={gameState.winner}
-      winningCells={gameState.winningCells}
-      whiteTime={gameState.whiteTime}
-      blackTime={gameState.blackTime}
-      whiteScore={whiteScore}
-      blackScore={blackScore}
-      whiteName={whiteName}
-      blackName={blackName}
-      whiteStats={whiteStats}
-      blackStats={blackStats}
-      isTimed={isTimed}
-      gameMode={gameMode}
-      myPlayer={myPlayer}
-      aiPlayer={aiPlayer}
-      aiDifficulty={aiDifficulty}
-      canExplode={gameState.canExplode}
-      ghost={gameState.getGhost()}
-      onHover={(x) => gameState.setHoverX(x)}
-      onClick={gameState.handlePlace}
-      onRotate={gameState.handleRotate}
-      onReset={gameState.resetGame}
-      onQuit={handleQuit}
-      rematchRequested={rematchRequested}
-      opponentRematchRequested={opponentRematchRequested}
-      onRequestRematch={() => {
-        setRematchRequested(true);
-        socket.requestRematch();
-      }}
-      isChatOpen={isChatOpen}
-      setIsChatOpen={(open) => {
-        setIsChatOpen(open);
-        if (open) setUnreadCount(0);
-      }}
-      chatMessages={chatMessages}
-      unreadCount={unreadCount}
-      onSendMessage={socket.sendMessage}
-      myName={myName}
-      reactions={allReactions}
-      onOpenEmojiUpload={() => setShowEmojiUpload(true)}
-      activeReactions={activeReactions}
-      onReactionComplete={(id) =>
-        setActiveReactions((prev) => prev.filter((r) => r.id !== id))
-      }
-      showTutorial={showTutorial}
-      setShowTutorial={setShowTutorial}
-      viewStatsPlayer={viewStatsPlayer}
-      setViewStatsPlayer={setViewStatsPlayer}
-    />
-    <CustomEmojiUpload
-      isOpen={showEmojiUpload}
-      onClose={() => setShowEmojiUpload(false)}
-      onUpload={handleCustomEmojiUpload}
-    />
+    <>
+      <GameView
+        blocks={gameState.blocks}
+        currentPlayer={gameState.currentPlayer}
+        winner={gameState.winner}
+        winningCells={gameState.winningCells}
+        whiteTime={gameState.whiteTime}
+        blackTime={gameState.blackTime}
+        whiteScore={whiteScore}
+        blackScore={blackScore}
+        whiteName={whiteName}
+        blackName={blackName}
+        whiteStats={whiteStats}
+        blackStats={blackStats}
+        isTimed={isTimed}
+        gameMode={gameMode}
+        myPlayer={myPlayer}
+        aiPlayer={aiPlayer}
+        aiDifficulty={aiDifficulty}
+        canExplode={gameState.canExplode}
+        ghost={gameState.getGhost()}
+        onHover={(x) => gameState.setHoverX(x)}
+        onClick={gameState.handlePlace}
+        onRotate={gameState.handleRotate}
+        onReset={gameState.resetGame}
+        onQuit={handleQuit}
+        rematchRequested={rematchRequested}
+        opponentRematchRequested={opponentRematchRequested}
+        onRequestRematch={() => {
+          setRematchRequested(true);
+          socket.requestRematch();
+        }}
+        isChatOpen={isChatOpen}
+        setIsChatOpen={(open) => {
+          setIsChatOpen(open);
+          if (open) setUnreadCount(0);
+        }}
+        chatMessages={chatMessages}
+        unreadCount={unreadCount}
+        onSendMessage={socket.sendMessage}
+        myName={myName}
+        reactions={allReactions}
+        onOpenEmojiUpload={() => setShowEmojiUpload(true)}
+        activeReactions={activeReactions}
+        onReactionComplete={(id) =>
+          setActiveReactions((prev) => prev.filter((r) => r.id !== id))
+        }
+        showTutorial={showTutorial}
+        setShowTutorial={setShowTutorial}
+        viewStatsPlayer={viewStatsPlayer}
+        setViewStatsPlayer={setViewStatsPlayer}
+      />
+      <CustomEmojiUpload
+        isOpen={showEmojiUpload}
+        onClose={() => setShowEmojiUpload(false)}
+        onUpload={handleCustomEmojiUpload}
+      />
+    </>
   );
 }
 
