@@ -83,7 +83,9 @@ const rooms = new Map();
 //   blackScore: number,
 //   lastWinner: string | null (tracks who won the last game: 'white', 'black', or 'draw'),
 //   timeSettings: { isTimed: boolean, initialTime: number, increment: number },
-//   createdAt: timestamp
+//   createdAt: timestamp,
+//   gameStarted: boolean (tracks if at least one move has been made),
+//   disconnectMatchSaved: boolean (prevents duplicate saves on disconnect)
 // }
 
 io.on("connection", (socket) => {
@@ -118,6 +120,8 @@ io.on("connection", (socket) => {
       lastWinner: null,
       timeSettings,
       createdAt: Date.now(),
+      gameStarted: false,
+      disconnectMatchSaved: false,
     });
 
     socket.join(roomId);
@@ -200,6 +204,13 @@ io.on("connection", (socket) => {
 
   socket.on("game_action", (payload) => {
     const { roomId, type, ...data } = payload;
+    const room = rooms.get(roomId);
+    
+    // Mark game as started when first move is made
+    if (room && type === "MOVE") {
+      room.gameStarted = true;
+    }
+    
     socket.to(roomId).emit("game_action", { type, ...data });
   });
 
@@ -225,9 +236,11 @@ io.on("connection", (socket) => {
     socket.to(roomId).emit("rematch_requested");
 
     if (room.whiteRematch && room.blackRematch) {
-      // Reset rematch flags
+      // Reset rematch flags and game state
       room.whiteRematch = false;
       room.blackRematch = false;
+      room.gameStarted = false;
+      room.disconnectMatchSaved = false;
 
       // Determine starting player: loser of previous match goes first
       // If previous game was a draw or no previous game, white (host) starts
@@ -330,26 +343,35 @@ io.on("connection", (socket) => {
 async function handleDisconnect(socket, roomId) {
   const room = rooms.get(roomId);
   if (room) {
-    // Check if game was in progress (both players joined)
-    if (room.white && room.black) {
+    // Check if game was in progress:
+    // 1. Both players must have joined
+    // 2. At least one move must have been made (gameStarted flag)
+    // 3. Match shouldn't have been saved already (prevents duplicates)
+    // 4. Socket must be one of the players (not a spectator or invalid)
+    const isPlayer = socket.id === room.white || socket.id === room.black;
+    
+    if (room.white && room.black && room.gameStarted && !room.disconnectMatchSaved && isPlayer) {
       // Determine who disconnected and who is the winner
       const disconnectedPlayer = socket.id === room.white ? "white" : "black";
       const winner = disconnectedPlayer === "white" ? "black" : "white";
+      
+      // Mark as saved to prevent duplicate saves
+      room.disconnectMatchSaved = true;
       
       // Save match to database with disconnecting player as loser
       const matchData = {
         whiteName: room.whiteName,
         blackName: room.blackName,
         winner: winner,
-        matchTime: 0, // Unknown time for disconnected games
-        whiteNumberOfBlocks: 0, // Unknown block count
-        blackNumberOfBlocks: 0, // Unknown block count
+        matchTime: 0, // Time is tracked client-side, not available on disconnect
+        whiteNumberOfBlocks: 0, // Block count is tracked client-side
+        blackNumberOfBlocks: 0, // Block count is tracked client-side
         matchEndTimestamp: new Date().toISOString(),
       };
       
       try {
         await saveMatch(matchData);
-        console.log(`Match saved due to ${disconnectedPlayer} disconnect. Winner: ${winner}`);
+        console.log(`Match saved due to ${disconnectedPlayer} (${room[disconnectedPlayer + 'Name']}) disconnect. Winner: ${winner} (${room[winner + 'Name']})`);
       } catch (error) {
         console.error("Error saving match on disconnect:", error);
       }
