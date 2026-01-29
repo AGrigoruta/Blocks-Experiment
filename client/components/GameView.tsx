@@ -68,8 +68,8 @@ interface GameViewProps {
   myName: string;
 
   // Reactions
-  currentReaction: { emoji: string; sender: string } | null;
-  onReactionComplete: () => void;
+  activeReactions: { id: string; emoji: string; sender: string }[];
+  onReactionComplete: (id: string) => void;
 
   // Modals
   showTutorial: boolean;
@@ -112,7 +112,7 @@ export const GameView = ({
   unreadCount,
   onSendMessage,
   myName,
-  currentReaction,
+  activeReactions,
   onReactionComplete,
   showTutorial,
   setShowTutorial,
@@ -136,13 +136,10 @@ export const GameView = ({
       )}
 
       {/* Reaction Overlay */}
-      {currentReaction && (
-        <ReactionOverlay
-          reaction={currentReaction.emoji}
-          sender={currentReaction.sender}
-          onComplete={onReactionComplete}
-        />
-      )}
+      <ReactionOverlay
+        reactions={activeReactions}
+        onComplete={onReactionComplete}
+      />
 
       <Canvas
         shadows

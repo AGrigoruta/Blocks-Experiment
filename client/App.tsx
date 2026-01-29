@@ -80,10 +80,11 @@ function App() {
   const [unreadCount, setUnreadCount] = useState(0);
   
   // Reactions
-  const [currentReaction, setCurrentReaction] = useState<{
+  const [activeReactions, setActiveReactions] = useState<{
+    id: string;
     emoji: string;
     sender: string;
-  } | null>(null);
+  }[]>([]);
 
   // Lobby
   const [rooms, setRooms] = useState<RoomInfo[]>([]);
@@ -183,7 +184,10 @@ function App() {
       setChatMessages((prev) => [...prev, msg]);
       // Check if message is a reaction emoji
       if (REACTIONS.includes(msg.text)) {
-        setCurrentReaction({ emoji: msg.text, sender: msg.sender });
+        setActiveReactions((prev) => [
+          ...prev,
+          { id: msg.id, emoji: msg.text, sender: msg.sender },
+        ]);
       }
       if (!isChatOpenRef.current) {
         setUnreadCount((prev) => prev + 1);
@@ -711,8 +715,10 @@ function App() {
       unreadCount={unreadCount}
       onSendMessage={socket.sendMessage}
       myName={myName}
-      currentReaction={currentReaction}
-      onReactionComplete={() => setCurrentReaction(null)}
+      activeReactions={activeReactions}
+      onReactionComplete={(id) =>
+        setActiveReactions((prev) => prev.filter((r) => r.id !== id))
+      }
       showTutorial={showTutorial}
       setShowTutorial={setShowTutorial}
       viewStatsPlayer={viewStatsPlayer}
