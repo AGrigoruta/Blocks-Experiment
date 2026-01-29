@@ -31,3 +31,14 @@ export const TIME_PRESETS = [
   { label: "5m", value: 300 },
   { label: "10m", value: 600 },
 ];
+
+// Chat Reactions
+export const REACTIONS = ["👍", "😂", "🎉", "😮", "❤️", "🔥"];
+export const REACTION_LABELS: Record<string, string> = {
+  "👍": "thumbs up",
+  "😂": "laughing",
+  "🎉": "party",
+  "😮": "surprised",
+  "❤️": "heart",
+  "🔥": "fire",
+};

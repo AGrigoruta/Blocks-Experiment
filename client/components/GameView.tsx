@@ -5,6 +5,7 @@ import { Tutorial } from "./Tutorial";
 import { LeaderboardModal } from "./LeaderboardModal";
 import { LobbyModal } from "./LobbyModal";
 import { PlayerCardModal } from "./PlayerCardModal";
+import { ReactionOverlay } from "./ReactionOverlay";
 import { formatTime } from "../utils/helpers";
 import { INITIAL_CAMERA_POSITION, MAX_BLOCKS_PER_PLAYER } from "../constants";
 import {
@@ -66,6 +67,10 @@ interface GameViewProps {
   onSendMessage: (text: string) => void;
   myName: string;
 
+  // Reactions
+  currentReaction: { emoji: string; sender: string } | null;
+  onReactionComplete: () => void;
+
   // Modals
   showTutorial: boolean;
   setShowTutorial: (show: boolean) => void;
@@ -107,6 +112,8 @@ export const GameView = ({
   unreadCount,
   onSendMessage,
   myName,
+  currentReaction,
+  onReactionComplete,
   showTutorial,
   setShowTutorial,
   viewStatsPlayer,
@@ -125,6 +132,15 @@ export const GameView = ({
           name={viewStatsPlayer === "white" ? whiteName : blackName}
           stats={viewStatsPlayer === "white" ? whiteStats! : blackStats!}
           onClose={() => setViewStatsPlayer(null)}
+        />
+      )}
+
+      {/* Reaction Overlay */}
+      {currentReaction && (
+        <ReactionOverlay
+          reaction={currentReaction.emoji}
+          sender={currentReaction.sender}
+          onComplete={onReactionComplete}
         />
       )}
 

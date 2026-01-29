@@ -29,6 +29,7 @@ import {
   INITIAL_TIME_SECONDS,
   INCREMENT_SECONDS,
   MAX_BLOCKS_PER_PLAYER,
+  REACTIONS,
 } from "@/constants";
 
 const SERVER_URL =
@@ -77,6 +78,12 @@ function App() {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  
+  // Reactions
+  const [currentReaction, setCurrentReaction] = useState<{
+    emoji: string;
+    sender: string;
+  } | null>(null);
 
   // Lobby
   const [rooms, setRooms] = useState<RoomInfo[]>([]);
@@ -174,6 +181,10 @@ function App() {
     },
     onReceiveMessage: (msg) => {
       setChatMessages((prev) => [...prev, msg]);
+      // Check if message is a reaction emoji
+      if (REACTIONS.includes(msg.text)) {
+        setCurrentReaction({ emoji: msg.text, sender: msg.sender });
+      }
       if (!isChatOpenRef.current) {
         setUnreadCount((prev) => prev + 1);
       }
@@ -700,6 +711,8 @@ function App() {
       unreadCount={unreadCount}
       onSendMessage={socket.sendMessage}
       myName={myName}
+      currentReaction={currentReaction}
+      onReactionComplete={() => setCurrentReaction(null)}
       showTutorial={showTutorial}
       setShowTutorial={setShowTutorial}
       viewStatsPlayer={viewStatsPlayer}
