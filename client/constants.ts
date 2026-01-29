@@ -32,8 +32,9 @@ export const TIME_PRESETS = [
   { label: "10m", value: 600 },
 ];
 
-// Chat Reactions
-export const REACTIONS = ["👍", "😂", "🎉", "😮", "❤️", "🔥"];
+// Chat Reactions - Default emojis
+export const DEFAULT_REACTIONS = ["👍", "😂", "🎉", "😮", "❤️", "🔥"];
+export const REACTIONS = DEFAULT_REACTIONS; // Will be updated dynamically with custom emojis
 export const REACTION_LABELS: Record<string, string> = {
   "👍": "thumbs up",
   "😂": "laughing",

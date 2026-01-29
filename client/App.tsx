@@ -30,7 +30,10 @@ import {
   INCREMENT_SECONDS,
   MAX_BLOCKS_PER_PLAYER,
   REACTIONS,
+  DEFAULT_REACTIONS,
 } from "@/constants";
+import { CustomEmoji } from "@/types";
+import { CustomEmojiUpload } from "@/components/CustomEmojiUpload";
 
 const SERVER_URL =
   (import.meta as any).env?.VITE_SERVER_URL || "http://localhost:3000";
@@ -85,6 +88,11 @@ function App() {
     emoji: string;
     sender: string;
   }[]>([]);
+  
+  // Custom Emojis
+  const [customEmojis, setCustomEmojis] = useState<CustomEmoji[]>([]);
+  const [allReactions, setAllReactions] = useState<string[]>(DEFAULT_REACTIONS);
+  const [showEmojiUpload, setShowEmojiUpload] = useState(false);
 
   // Lobby
   const [rooms, setRooms] = useState<RoomInfo[]>([]);
@@ -183,7 +191,7 @@ function App() {
     onReceiveMessage: (msg) => {
       setChatMessages((prev) => [...prev, msg]);
       // Check if message is a reaction emoji
-      if (REACTIONS.includes(msg.text)) {
+      if (allReactions.includes(msg.text)) {
         setActiveReactions((prev) => [
           ...prev,
           { id: msg.id, emoji: msg.text, sender: msg.sender },
@@ -238,6 +246,44 @@ function App() {
   useEffect(() => {
     isChatOpenRef.current = isChatOpen;
   }, [isChatOpen]);
+
+  // Fetch and listen for custom emojis
+  useEffect(() => {
+    if (!socket.socketRef.current) return;
+
+    const socketInstance = socket.socketRef.current;
+
+    // Fetch custom emojis on mount
+    socketInstance.emit("get_custom_emojis");
+
+    // Listen for custom emoji updates
+    const handleCustomEmojisData = (data: { emojis: CustomEmoji[] }) => {
+      setCustomEmojis(data.emojis);
+      // Combine default reactions with custom emojis
+      const customEmojiList = data.emojis.map((e) => e.emoji);
+      setAllReactions([...DEFAULT_REACTIONS, ...customEmojiList]);
+    };
+
+    const handleCustomEmojiAdded = (emoji: CustomEmoji) => {
+      setCustomEmojis((prev) => {
+        // Check if emoji already exists
+        if (prev.some((e) => e.id === emoji.id)) return prev;
+        const updated = [...prev, emoji];
+        // Update reactions list
+        const customEmojiList = updated.map((e) => e.emoji);
+        setAllReactions([...DEFAULT_REACTIONS, ...customEmojiList]);
+        return updated;
+      });
+    };
+
+    socketInstance.on("custom_emojis_data", handleCustomEmojisData);
+    socketInstance.on("custom_emoji_added", handleCustomEmojiAdded);
+
+    return () => {
+      socketInstance.off("custom_emojis_data", handleCustomEmojisData);
+      socketInstance.off("custom_emoji_added", handleCustomEmojiAdded);
+    };
+  }, [socket.socketRef.current]);
 
   // Handle winner/score updates
   useEffect(() => {
@@ -568,6 +614,16 @@ function App() {
     gameState.resetGame();
   };
 
+  const handleCustomEmojiUpload = (emoji: string, label: string) => {
+    if (socket.socketRef.current) {
+      socket.socketRef.current.emit("upload_custom_emoji", {
+        emoji,
+        label,
+        uploadedBy: myName,
+      });
+    }
+  };
+
   // Render lobby
   if (isInLobby) {
     return (
@@ -715,6 +771,8 @@ function App() {
       unreadCount={unreadCount}
       onSendMessage={socket.sendMessage}
       myName={myName}
+      reactions={allReactions}
+      onOpenEmojiUpload={() => setShowEmojiUpload(true)}
       activeReactions={activeReactions}
       onReactionComplete={(id) =>
         setActiveReactions((prev) => prev.filter((r) => r.id !== id))
@@ -723,6 +781,11 @@ function App() {
       setShowTutorial={setShowTutorial}
       viewStatsPlayer={viewStatsPlayer}
       setViewStatsPlayer={setViewStatsPlayer}
+    />
+    <CustomEmojiUpload
+      isOpen={showEmojiUpload}
+      onClose={() => setShowEmojiUpload(false)}
+      onUpload={handleCustomEmojiUpload}
     />
   );
 }

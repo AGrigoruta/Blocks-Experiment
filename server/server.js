@@ -6,6 +6,8 @@ import {
   getMatchesByPlayer,
   getPlayerStats,
   getLeaderboard,
+  saveCustomEmoji,
+  getAllCustomEmojis,
 } from "./db.js";
 
 const PORT = process.env.PORT || 3000;
@@ -323,6 +325,29 @@ io.on("connection", (socket) => {
       })
       .catch((error) => {
         socket.emit("player_stats", { stats: null, error: error.message });
+      });
+  });
+
+  socket.on("upload_custom_emoji", (data) => {
+    const { emoji, label, uploadedBy } = data;
+    saveCustomEmoji({ emoji, label, uploadedBy })
+      .then((savedEmoji) => {
+        // Broadcast to all clients that a new emoji is available
+        io.emit("custom_emoji_added", savedEmoji);
+        socket.emit("custom_emoji_uploaded", { success: true, emoji: savedEmoji });
+      })
+      .catch((error) => {
+        socket.emit("custom_emoji_uploaded", { success: false, error: error.message });
+      });
+  });
+
+  socket.on("get_custom_emojis", () => {
+    getAllCustomEmojis()
+      .then((emojis) => {
+        socket.emit("custom_emojis_data", { emojis });
+      })
+      .catch((error) => {
+        socket.emit("custom_emojis_data", { emojis: [], error: error.message });
       });
   });
 

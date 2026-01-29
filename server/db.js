@@ -37,6 +37,27 @@ pool
     console.error("Make sure DATABASE_URL environment variable is set");
   });
 
+// Create custom_emojis table
+pool
+  .query(
+    `
+  CREATE TABLE IF NOT EXISTS custom_emojis (
+    id SERIAL PRIMARY KEY,
+    emoji TEXT NOT NULL,
+    label TEXT NOT NULL,
+    uploadedBy TEXT NOT NULL,
+    createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(emoji)
+  )
+`
+  )
+  .then(() => {
+    console.log("Custom emojis table initialized");
+  })
+  .catch((err) => {
+    console.error("Error initializing custom_emojis table:", err);
+  });
+
 /**
  * Save a match result to the database
  * @param {Object} match - Match data
@@ -185,6 +206,41 @@ export async function getLeaderboard(limit = 10) {
     LIMIT $1
   `;
   const result = await pool.query(query, [limit]);
+  return result.rows;
+}
+
+/**
+ * Save a custom emoji to the database
+ * @param {Object} emoji - Emoji data
+ * @param {string} emoji.emoji - The emoji character(s)
+ * @param {string} emoji.label - Label/description for the emoji
+ * @param {string} emoji.uploadedBy - Name of the user who uploaded it
+ * @returns {Object} The inserted emoji with its ID
+ */
+export async function saveCustomEmoji(emoji) {
+  const query = `
+    INSERT INTO custom_emojis (emoji, label, uploadedBy)
+    VALUES ($1, $2, $3)
+    ON CONFLICT (emoji) DO NOTHING
+    RETURNING *
+  `;
+  
+  const values = [emoji.emoji, emoji.label, emoji.uploadedBy];
+  const result = await pool.query(query, values);
+  return result.rows[0];
+}
+
+/**
+ * Get all custom emojis from the database
+ * @returns {Array} Array of custom emoji objects
+ */
+export async function getAllCustomEmojis() {
+  const query = `
+    SELECT id, emoji, label, uploadedBy, createdAt
+    FROM custom_emojis
+    ORDER BY createdAt DESC
+  `;
+  const result = await pool.query(query);
   return result.rows;
 }
 
