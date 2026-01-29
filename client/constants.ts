@@ -34,7 +34,6 @@ export const TIME_PRESETS = [
 
 // Chat Reactions - Default emojis
 export const DEFAULT_REACTIONS = ["👍", "😂", "🎉", "😮", "❤️", "🔥"];
-export const REACTIONS = DEFAULT_REACTIONS; // Will be updated dynamically with custom emojis
 export const REACTION_LABELS: Record<string, string> = {
   "👍": "thumbs up",
   "😂": "laughing",

@@ -215,18 +215,29 @@ export async function getLeaderboard(limit = 10) {
  * @param {string} emoji.emoji - The emoji character(s)
  * @param {string} emoji.label - Label/description for the emoji
  * @param {string} emoji.uploadedBy - Name of the user who uploaded it
- * @returns {Object} The inserted emoji with its ID
+ * @returns {Object} The inserted emoji with its ID, or null if emoji already exists
  */
 export async function saveCustomEmoji(emoji) {
-  const query = `
+  // Check if emoji already exists
+  const checkQuery = `
+    SELECT * FROM custom_emojis WHERE emoji = $1
+  `;
+  const checkResult = await pool.query(checkQuery, [emoji.emoji]);
+  
+  if (checkResult.rows.length > 0) {
+    // Return null to indicate emoji already exists
+    return null;
+  }
+  
+  // Insert new emoji
+  const insertQuery = `
     INSERT INTO custom_emojis (emoji, label, uploadedBy)
     VALUES ($1, $2, $3)
-    ON CONFLICT (emoji) DO NOTHING
     RETURNING *
   `;
   
   const values = [emoji.emoji, emoji.label, emoji.uploadedBy];
-  const result = await pool.query(query, values);
+  const result = await pool.query(insertQuery, values);
   return result.rows[0];
 }
 

@@ -330,8 +330,69 @@ io.on("connection", (socket) => {
 
   socket.on("upload_custom_emoji", (data) => {
     const { emoji, label, uploadedBy } = data;
+    
+    // Validate input
+    if (!emoji || typeof emoji !== "string" || emoji.trim().length === 0) {
+      socket.emit("custom_emoji_uploaded", { 
+        success: false, 
+        error: "Emoji is required" 
+      });
+      return;
+    }
+    
+    if (!label || typeof label !== "string" || label.trim().length === 0) {
+      socket.emit("custom_emoji_uploaded", { 
+        success: false, 
+        error: "Label is required" 
+      });
+      return;
+    }
+    
+    if (!uploadedBy || typeof uploadedBy !== "string") {
+      socket.emit("custom_emoji_uploaded", { 
+        success: false, 
+        error: "Uploader name is required" 
+      });
+      return;
+    }
+    
+    // Validate length constraints
+    if (emoji.length > 10) {
+      socket.emit("custom_emoji_uploaded", { 
+        success: false, 
+        error: "Emoji is too long (max 10 characters)" 
+      });
+      return;
+    }
+    
+    if (label.length > 50) {
+      socket.emit("custom_emoji_uploaded", { 
+        success: false, 
+        error: "Label is too long (max 50 characters)" 
+      });
+      return;
+    }
+    
+    // Basic emoji validation - check if it contains emoji characters
+    const emojiRegex = /[\p{Emoji}]/u;
+    if (!emojiRegex.test(emoji)) {
+      socket.emit("custom_emoji_uploaded", { 
+        success: false, 
+        error: "Please provide a valid emoji" 
+      });
+      return;
+    }
+    
     saveCustomEmoji({ emoji, label, uploadedBy })
       .then((savedEmoji) => {
+        if (savedEmoji === null) {
+          // Emoji already exists
+          socket.emit("custom_emoji_uploaded", { 
+            success: false, 
+            error: "This emoji has already been added" 
+          });
+          return;
+        }
         // Broadcast to all clients that a new emoji is available
         io.emit("custom_emoji_added", savedEmoji);
         socket.emit("custom_emoji_uploaded", { success: true, emoji: savedEmoji });

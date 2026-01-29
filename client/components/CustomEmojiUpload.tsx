@@ -1,19 +1,28 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
 interface CustomEmojiUploadProps {
   onUpload: (emoji: string, label: string) => void;
   isOpen: boolean;
   onClose: () => void;
+  serverError?: string | null;
 }
 
 export const CustomEmojiUpload: React.FC<CustomEmojiUploadProps> = ({
   onUpload,
   isOpen,
   onClose,
+  serverError,
 }) => {
   const [emoji, setEmoji] = useState("");
   const [label, setLabel] = useState("");
   const [error, setError] = useState("");
+
+  // Update error when server error changes
+  useEffect(() => {
+    if (serverError) {
+      setError(serverError);
+    }
+  }, [serverError]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,14 +38,29 @@ export const CustomEmojiUpload: React.FC<CustomEmojiUploadProps> = ({
       return;
     }
     
-    // Check if it's a valid emoji (basic check)
-    const emojiRegex = /[\p{Emoji}]/u;
-    if (!emojiRegex.test(emoji)) {
-      setError("Please enter a valid emoji");
+    // Trim the emoji to handle whitespace
+    const trimmedEmoji = emoji.trim();
+    
+    // Check length - should be reasonable for emoji sequences
+    if (trimmedEmoji.length > 10) {
+      setError("Emoji is too long");
       return;
     }
     
-    onUpload(emoji.trim(), label.trim());
+    // Check if it's a valid emoji (basic check)
+    const emojiRegex = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Presentation}]+$/u;
+    if (!emojiRegex.test(trimmedEmoji)) {
+      setError("Please enter a valid emoji (no text)");
+      return;
+    }
+    
+    // Prevent very long emoji sequences (more than 5 codepoints)
+    if ([...trimmedEmoji].length > 5) {
+      setError("Please use a single emoji or short emoji sequence");
+      return;
+    }
+    
+    onUpload(trimmedEmoji, label.trim());
     setEmoji("");
     setLabel("");
     setError("");

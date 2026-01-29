@@ -29,7 +29,6 @@ import {
   INITIAL_TIME_SECONDS,
   INCREMENT_SECONDS,
   MAX_BLOCKS_PER_PLAYER,
-  REACTIONS,
   DEFAULT_REACTIONS,
 } from "@/constants";
 import { CustomEmoji } from "@/types";
@@ -93,6 +92,7 @@ function App() {
   const [customEmojis, setCustomEmojis] = useState<CustomEmoji[]>([]);
   const [allReactions, setAllReactions] = useState<string[]>(DEFAULT_REACTIONS);
   const [showEmojiUpload, setShowEmojiUpload] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   // Lobby
   const [rooms, setRooms] = useState<RoomInfo[]>([]);
@@ -249,9 +249,8 @@ function App() {
 
   // Fetch and listen for custom emojis
   useEffect(() => {
-    if (!socket.socketRef.current) return;
-
     const socketInstance = socket.socketRef.current;
+    if (!socketInstance || !socketInstance.connected) return;
 
     // Fetch custom emojis on mount
     socketInstance.emit("get_custom_emojis");
@@ -268,22 +267,36 @@ function App() {
       setCustomEmojis((prev) => {
         // Check if emoji already exists
         if (prev.some((e) => e.id === emoji.id)) return prev;
-        const updated = [...prev, emoji];
-        // Update reactions list
-        const customEmojiList = updated.map((e) => e.emoji);
-        setAllReactions([...DEFAULT_REACTIONS, ...customEmojiList]);
-        return updated;
+        return [...prev, emoji];
       });
+    };
+
+    const handleCustomEmojiUploaded = (data: { success: boolean; error?: string; emoji?: CustomEmoji }) => {
+      if (!data.success) {
+        setUploadError(data.error || "Failed to upload emoji");
+      } else {
+        // Success - close modal
+        setShowEmojiUpload(false);
+        setUploadError(null);
+      }
     };
 
     socketInstance.on("custom_emojis_data", handleCustomEmojisData);
     socketInstance.on("custom_emoji_added", handleCustomEmojiAdded);
+    socketInstance.on("custom_emoji_uploaded", handleCustomEmojiUploaded);
 
     return () => {
       socketInstance.off("custom_emojis_data", handleCustomEmojisData);
       socketInstance.off("custom_emoji_added", handleCustomEmojiAdded);
+      socketInstance.off("custom_emoji_uploaded", handleCustomEmojiUploaded);
     };
-  }, [socket.socketRef.current]);
+  }, [socket.connectionStatus]); // Use connectionStatus as dependency instead of socketRef.current
+
+  // Update allReactions whenever customEmojis changes
+  useEffect(() => {
+    const customEmojiList = customEmojis.map((e) => e.emoji);
+    setAllReactions([...DEFAULT_REACTIONS, ...customEmojiList]);
+  }, [customEmojis]);
 
   // Handle winner/score updates
   useEffect(() => {
@@ -785,8 +798,12 @@ function App() {
       />
       <CustomEmojiUpload
         isOpen={showEmojiUpload}
-        onClose={() => setShowEmojiUpload(false)}
+        onClose={() => {
+          setShowEmojiUpload(false);
+          setUploadError(null);
+        }}
         onUpload={handleCustomEmojiUpload}
+        serverError={uploadError}
       />
     </>
   );
