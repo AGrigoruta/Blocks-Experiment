@@ -5,6 +5,7 @@ export interface ChatMessage {
   sender: string;
   text: string;
   timestamp: number;
+  isReaction?: boolean;
 }
 
 interface ChatProps {
@@ -15,6 +16,8 @@ interface ChatProps {
   myName: string;
 }
 
+const REACTIONS = ["👍", "😂", "🎉", "😮", "❤️", "🔥"];
+
 export const Chat: React.FC<ChatProps> = ({
   isOpen,
   onClose,
@@ -23,6 +26,7 @@ export const Chat: React.FC<ChatProps> = ({
   myName,
 }) => {
   const [inputText, setInputText] = useState("");
+  const [showReactions, setShowReactions] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -37,6 +41,11 @@ export const Chat: React.FC<ChatProps> = ({
       onSendMessage(inputText.trim());
       setInputText("");
     }
+  };
+
+  const handleReactionClick = (reaction: string) => {
+    onSendMessage(reaction);
+    setShowReactions(false);
   };
 
   if (!isOpen) return null;
@@ -90,14 +99,15 @@ export const Chat: React.FC<ChatProps> = ({
         )}
         {messages.map((msg) => {
           const isMe = msg.sender === myName;
+          const isReaction = REACTIONS.includes(msg.text);
           return (
             <div
               key={msg.id}
               className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}
             >
               <div
-                className={`max-w-[85%] px-3 py-2 rounded-xl text-sm break-words shadow-sm ${
-                  isMe
+                className={`${isReaction ? "text-4xl" : "max-w-[85%] px-3 py-2 rounded-xl text-sm break-words shadow-sm"} ${
+                  isReaction ? "" : isMe
                     ? "bg-blue-600/90 text-white rounded-tr-none"
                     : "bg-gray-700/80 text-gray-200 rounded-tl-none"
                 }`}
@@ -116,9 +126,32 @@ export const Chat: React.FC<ChatProps> = ({
       {/* Input Area */}
       <form
         onSubmit={handleSubmit}
-        className="p-3 border-t border-gray-700 bg-gray-800/30 rounded-b-2xl"
+        className="border-t border-gray-700 bg-gray-800/30 rounded-b-2xl"
       >
-        <div className="flex gap-2">
+        {/* Reaction Picker */}
+        {showReactions && (
+          <div className="p-2 flex gap-2 justify-center bg-gray-900/50 border-b border-gray-700">
+            {REACTIONS.map((reaction) => (
+              <button
+                key={reaction}
+                type="button"
+                onClick={() => handleReactionClick(reaction)}
+                className="text-2xl hover:scale-125 transition-transform p-1 hover:bg-gray-700/50 rounded"
+              >
+                {reaction}
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="p-3 flex gap-2">
+          <button
+            type="button"
+            onClick={() => setShowReactions(!showReactions)}
+            className="bg-gray-900/50 hover:bg-gray-700 text-white p-2 rounded-lg transition"
+            title="Reactions"
+          >
+            <span className="text-xl">😊</span>
+          </button>
           <input
             type="text"
             value={inputText}
