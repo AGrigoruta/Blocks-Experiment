@@ -29,6 +29,7 @@ import {
   INITIAL_TIME_SECONDS,
   INCREMENT_SECONDS,
   MAX_BLOCKS_PER_PLAYER,
+  REACTIONS,
 } from "@/constants";
 
 const SERVER_URL =
@@ -181,7 +182,6 @@ function App() {
     onReceiveMessage: (msg) => {
       setChatMessages((prev) => [...prev, msg]);
       // Check if message is a reaction emoji
-      const REACTIONS = ["👍", "😂", "🎉", "😮", "❤️", "🔥"];
       if (REACTIONS.includes(msg.text)) {
         setCurrentReaction({ emoji: msg.text, sender: msg.sender });
       }

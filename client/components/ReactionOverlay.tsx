@@ -16,13 +16,18 @@ export const ReactionOverlay: React.FC<ReactionOverlayProps> = ({
   useEffect(() => {
     if (reaction) {
       setIsVisible(true);
-      const timer = setTimeout(() => {
+      let completeTimer: number | undefined;
+      const fadeOutTimer = setTimeout(() => {
         setIsVisible(false);
-        setTimeout(onComplete, 300); // Wait for fade-out animation
+        completeTimer = setTimeout(onComplete, 300) as unknown as number;
       }, 2000);
-      return () => clearTimeout(timer);
+      return () => {
+        clearTimeout(fadeOutTimer);
+        if (completeTimer) clearTimeout(completeTimer);
+      };
     }
-  }, [reaction, onComplete]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reaction]); // Only re-run when reaction changes, not when onComplete changes
 
   if (!reaction) return null;
 
@@ -31,6 +36,9 @@ export const ReactionOverlay: React.FC<ReactionOverlayProps> = ({
       className={`fixed inset-0 pointer-events-none z-30 flex items-center justify-center transition-opacity duration-300 ${
         isVisible ? "opacity-100" : "opacity-0"
       }`}
+      role="status"
+      aria-live="polite"
+      aria-label={`${sender} sent reaction ${reaction}`}
     >
       <div className="flex flex-col items-center animate-in zoom-in-50 fade-in duration-300">
         <div className="text-[120px] md:text-[180px] drop-shadow-2xl animate-bounce">

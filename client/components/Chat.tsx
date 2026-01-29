@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from "react";
+import { REACTIONS, REACTION_LABELS } from "../constants";
 
 export interface ChatMessage {
   id: string;
   sender: string;
   text: string;
   timestamp: number;
-  isReaction?: boolean;
 }
 
 interface ChatProps {
@@ -15,8 +15,6 @@ interface ChatProps {
   onSendMessage: (text: string) => void;
   myName: string;
 }
-
-const REACTIONS = ["👍", "😂", "🎉", "😮", "❤️", "🔥"];
 
 export const Chat: React.FC<ChatProps> = ({
   isOpen,
@@ -137,6 +135,7 @@ export const Chat: React.FC<ChatProps> = ({
                 type="button"
                 onClick={() => handleReactionClick(reaction)}
                 className="text-2xl hover:scale-125 transition-transform p-1 hover:bg-gray-700/50 rounded"
+                aria-label={`Send ${REACTION_LABELS[reaction]} reaction`}
               >
                 {reaction}
               </button>
@@ -149,6 +148,7 @@ export const Chat: React.FC<ChatProps> = ({
             onClick={() => setShowReactions(!showReactions)}
             className="bg-gray-900/50 hover:bg-gray-700 text-white p-2 rounded-lg transition"
             title="Reactions"
+            aria-label="Open reaction picker"
           >
             <span className="text-xl">😊</span>
           </button>
