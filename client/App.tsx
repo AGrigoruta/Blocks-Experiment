@@ -29,8 +29,10 @@ import {
   INITIAL_TIME_SECONDS,
   INCREMENT_SECONDS,
   MAX_BLOCKS_PER_PLAYER,
-  REACTIONS,
+  DEFAULT_REACTIONS,
 } from "@/constants";
+import { CustomEmoji } from "@/types";
+import { CustomEmojiUpload } from "@/components/CustomEmojiUpload";
 
 const SERVER_URL =
   (import.meta as any).env?.VITE_SERVER_URL || "http://localhost:3000";
@@ -85,6 +87,12 @@ function App() {
     emoji: string;
     sender: string;
   }[]>([]);
+  
+  // Custom Emojis
+  const [customEmojis, setCustomEmojis] = useState<CustomEmoji[]>([]);
+  const [allReactions, setAllReactions] = useState<string[]>(DEFAULT_REACTIONS);
+  const [showEmojiUpload, setShowEmojiUpload] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   // Lobby
   const [rooms, setRooms] = useState<RoomInfo[]>([]);
@@ -183,7 +191,7 @@ function App() {
     onReceiveMessage: (msg) => {
       setChatMessages((prev) => [...prev, msg]);
       // Check if message is a reaction emoji
-      if (REACTIONS.includes(msg.text)) {
+      if (allReactions.includes(msg.text)) {
         setActiveReactions((prev) => [
           ...prev,
           { id: msg.id, emoji: msg.text, sender: msg.sender },
@@ -238,6 +246,54 @@ function App() {
   useEffect(() => {
     isChatOpenRef.current = isChatOpen;
   }, [isChatOpen]);
+
+  // Fetch and listen for custom emojis
+  useEffect(() => {
+    const socketInstance = socket.socketRef.current;
+    if (!socketInstance || !socketInstance.connected) return;
+
+    // Fetch custom emojis on mount
+    socketInstance.emit("get_custom_emojis");
+
+    // Listen for custom emoji updates
+    const handleCustomEmojisData = (data: { emojis: CustomEmoji[] }) => {
+      setCustomEmojis(data.emojis);
+    };
+
+    const handleCustomEmojiAdded = (emoji: CustomEmoji) => {
+      setCustomEmojis((prev) => {
+        // Check if emoji already exists
+        if (prev.some((e) => e.id === emoji.id)) return prev;
+        return [...prev, emoji];
+      });
+    };
+
+    const handleCustomEmojiUploaded = (data: { success: boolean; error?: string; emoji?: CustomEmoji }) => {
+      if (!data.success) {
+        setUploadError(data.error || "Failed to upload emoji");
+      } else {
+        // Success - close modal
+        setShowEmojiUpload(false);
+        setUploadError(null);
+      }
+    };
+
+    socketInstance.on("custom_emojis_data", handleCustomEmojisData);
+    socketInstance.on("custom_emoji_added", handleCustomEmojiAdded);
+    socketInstance.on("custom_emoji_uploaded", handleCustomEmojiUploaded);
+
+    return () => {
+      socketInstance.off("custom_emojis_data", handleCustomEmojisData);
+      socketInstance.off("custom_emoji_added", handleCustomEmojiAdded);
+      socketInstance.off("custom_emoji_uploaded", handleCustomEmojiUploaded);
+    };
+  }, [socket.connectionStatus]); // Use connectionStatus as dependency instead of socketRef.current
+
+  // Update allReactions whenever customEmojis changes
+  useEffect(() => {
+    const customEmojiList = customEmojis.map((e) => e.emoji);
+    setAllReactions([...DEFAULT_REACTIONS, ...customEmojiList]);
+  }, [customEmojis]);
 
   // Handle winner/score updates
   useEffect(() => {
@@ -527,6 +583,19 @@ function App() {
     gameState.resetGame();
   };
 
+  const handleCustomEmojiUpload = (emoji: string, label: string) => {
+    if (!socket.socketRef.current) {
+      setUploadError("You are not connected to the server. Please reconnect before uploading.");
+      return;
+    }
+    
+    socket.socketRef.current.emit("upload_custom_emoji", {
+      emoji,
+      label,
+      uploadedBy: myName,
+    });
+  };
+
   // Render lobby
   if (isInLobby) {
     return (
@@ -634,55 +703,68 @@ function App() {
 
   // Render game
   return (
-    <GameView
-      blocks={gameState.blocks}
-      currentPlayer={gameState.currentPlayer}
-      winner={gameState.winner}
-      winningCells={gameState.winningCells}
-      whiteTime={gameState.whiteTime}
-      blackTime={gameState.blackTime}
-      whiteScore={whiteScore}
-      blackScore={blackScore}
-      whiteName={whiteName}
-      blackName={blackName}
-      whiteStats={whiteStats}
-      blackStats={blackStats}
-      isTimed={isTimed}
-      gameMode={gameMode}
-      myPlayer={myPlayer}
-      aiPlayer={aiPlayer}
-      aiDifficulty={aiDifficulty}
-      canExplode={gameState.canExplode}
-      ghost={gameState.getGhost()}
-      onHover={(x) => gameState.setHoverX(x)}
-      onClick={gameState.handlePlace}
-      onRotate={gameState.handleRotate}
-      onReset={gameState.resetGame}
-      onQuit={handleQuit}
-      rematchRequested={rematchRequested}
-      opponentRematchRequested={opponentRematchRequested}
-      onRequestRematch={() => {
-        setRematchRequested(true);
-        socket.requestRematch();
-      }}
-      isChatOpen={isChatOpen}
-      setIsChatOpen={(open) => {
-        setIsChatOpen(open);
-        if (open) setUnreadCount(0);
-      }}
-      chatMessages={chatMessages}
-      unreadCount={unreadCount}
-      onSendMessage={socket.sendMessage}
-      myName={myName}
-      activeReactions={activeReactions}
-      onReactionComplete={(id) =>
-        setActiveReactions((prev) => prev.filter((r) => r.id !== id))
-      }
-      showTutorial={showTutorial}
-      setShowTutorial={setShowTutorial}
-      viewStatsPlayer={viewStatsPlayer}
-      setViewStatsPlayer={setViewStatsPlayer}
-    />
+    <>
+      <GameView
+        blocks={gameState.blocks}
+        currentPlayer={gameState.currentPlayer}
+        winner={gameState.winner}
+        winningCells={gameState.winningCells}
+        whiteTime={gameState.whiteTime}
+        blackTime={gameState.blackTime}
+        whiteScore={whiteScore}
+        blackScore={blackScore}
+        whiteName={whiteName}
+        blackName={blackName}
+        whiteStats={whiteStats}
+        blackStats={blackStats}
+        isTimed={isTimed}
+        gameMode={gameMode}
+        myPlayer={myPlayer}
+        aiPlayer={aiPlayer}
+        aiDifficulty={aiDifficulty}
+        canExplode={gameState.canExplode}
+        ghost={gameState.getGhost()}
+        onHover={(x) => gameState.setHoverX(x)}
+        onClick={gameState.handlePlace}
+        onRotate={gameState.handleRotate}
+        onReset={gameState.resetGame}
+        onQuit={handleQuit}
+        rematchRequested={rematchRequested}
+        opponentRematchRequested={opponentRematchRequested}
+        onRequestRematch={() => {
+          setRematchRequested(true);
+          socket.requestRematch();
+        }}
+        isChatOpen={isChatOpen}
+        setIsChatOpen={(open) => {
+          setIsChatOpen(open);
+          if (open) setUnreadCount(0);
+        }}
+        chatMessages={chatMessages}
+        unreadCount={unreadCount}
+        onSendMessage={socket.sendMessage}
+        myName={myName}
+        reactions={allReactions}
+        onOpenEmojiUpload={() => setShowEmojiUpload(true)}
+        activeReactions={activeReactions}
+        onReactionComplete={(id) =>
+          setActiveReactions((prev) => prev.filter((r) => r.id !== id))
+        }
+        showTutorial={showTutorial}
+        setShowTutorial={setShowTutorial}
+        viewStatsPlayer={viewStatsPlayer}
+        setViewStatsPlayer={setViewStatsPlayer}
+      />
+      <CustomEmojiUpload
+        isOpen={showEmojiUpload}
+        onClose={() => {
+          setShowEmojiUpload(false);
+          setUploadError(null);
+        }}
+        onUpload={handleCustomEmojiUpload}
+        serverError={uploadError}
+      />
+    </>
   );
 }
 

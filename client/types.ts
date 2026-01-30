@@ -71,6 +71,14 @@ export interface TimeSettings {
   increment: number;
 }
 
+export interface CustomEmoji {
+  id: number;
+  emoji: string;
+  label: string;
+  uploadedBy: string;
+  createdAt: string;
+}
+
 // --- Network Types ---
 
 export type GameMode = "local" | "online" | "ai";

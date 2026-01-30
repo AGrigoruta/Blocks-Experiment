@@ -37,6 +37,27 @@ pool
     console.error("Make sure DATABASE_URL environment variable is set");
   });
 
+// Create custom_emojis table
+pool
+  .query(
+    `
+  CREATE TABLE IF NOT EXISTS custom_emojis (
+    id SERIAL PRIMARY KEY,
+    emoji TEXT NOT NULL CHECK (char_length(emoji) <= 10),
+    label TEXT NOT NULL CHECK (char_length(label) <= 50),
+    uploadedBy TEXT NOT NULL CHECK (char_length(uploadedBy) <= 100),
+    createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(emoji)
+  )
+`
+  )
+  .then(() => {
+    console.log("Custom emojis table initialized");
+  })
+  .catch((err) => {
+    console.error("Error initializing custom_emojis table:", err);
+  });
+
 /**
  * Save a match result to the database
  * @param {Object} match - Match data
@@ -185,6 +206,53 @@ export async function getLeaderboard(limit = 10) {
     LIMIT $1
   `;
   const result = await pool.query(query, [limit]);
+  return result.rows;
+}
+
+/**
+ * Save a custom emoji to the database
+ * @param {Object} emoji - Emoji data
+ * @param {string} emoji.emoji - The emoji character(s)
+ * @param {string} emoji.label - Label/description for the emoji
+ * @param {string} emoji.uploadedBy - Name of the user who uploaded it
+ * @returns {Object|null} The inserted emoji object {id, emoji, label, uploadedBy, createdAt} or null if emoji already exists
+ */
+export async function saveCustomEmoji(emoji) {
+  // Ensure fields are trimmed before saving to the database
+  const trimmedEmoji = typeof emoji.emoji === "string" ? emoji.emoji.trim() : emoji.emoji;
+  const trimmedLabel = typeof emoji.label === "string" ? emoji.label.trim() : emoji.label;
+  const trimmedUploadedBy = typeof emoji.uploadedBy === "string" ? emoji.uploadedBy.trim() : emoji.uploadedBy;
+
+  // Insert new emoji atomically; if it already exists, do nothing
+  const insertQuery = `
+    INSERT INTO custom_emojis (emoji, label, uploadedBy)
+    VALUES ($1, $2, $3)
+    ON CONFLICT (emoji) DO NOTHING
+    RETURNING *
+  `;
+
+  const values = [trimmedEmoji, trimmedLabel, trimmedUploadedBy];
+  const result = await pool.query(insertQuery, values);
+
+  // If no row was returned, the emoji already existed
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+}
+
+/**
+ * Get all custom emojis from the database
+ * @returns {Array} Array of custom emoji objects
+ */
+export async function getAllCustomEmojis() {
+  const query = `
+    SELECT id, emoji, label, uploadedBy, createdAt
+    FROM custom_emojis
+    ORDER BY createdAt ASC
+  `;
+  const result = await pool.query(query);
   return result.rows;
 }
 

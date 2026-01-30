@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { REACTIONS, REACTION_LABELS } from "../constants";
+import { REACTION_LABELS } from "../constants";
 
 export interface ChatMessage {
   id: string;
@@ -14,6 +14,8 @@ interface ChatProps {
   messages: ChatMessage[];
   onSendMessage: (text: string) => void;
   myName: string;
+  reactions: string[];
+  onOpenEmojiUpload: () => void;
 }
 
 export const Chat: React.FC<ChatProps> = ({
@@ -22,6 +24,8 @@ export const Chat: React.FC<ChatProps> = ({
   messages,
   onSendMessage,
   myName,
+  reactions,
+  onOpenEmojiUpload,
 }) => {
   const [inputText, setInputText] = useState("");
   const [showReactions, setShowReactions] = useState(false);
@@ -97,7 +101,7 @@ export const Chat: React.FC<ChatProps> = ({
         )}
         {messages.map((msg) => {
           const isMe = msg.sender === myName;
-          const isReaction = REACTIONS.includes(msg.text);
+          const isReaction = reactions.includes(msg.text);
           return (
             <div
               key={msg.id}
@@ -128,18 +132,27 @@ export const Chat: React.FC<ChatProps> = ({
       >
         {/* Reaction Picker */}
         {showReactions && (
-          <div className="p-2 flex gap-2 justify-center bg-gray-900/50 border-b border-gray-700">
-            {REACTIONS.map((reaction) => (
-              <button
-                key={reaction}
-                type="button"
-                onClick={() => handleReactionClick(reaction)}
-                className="text-2xl hover:scale-125 transition-transform p-1 hover:bg-gray-700/50 rounded"
-                aria-label={`Send ${REACTION_LABELS[reaction]} reaction`}
-              >
-                {reaction}
-              </button>
-            ))}
+          <div className="p-2 bg-gray-900/50 border-b border-gray-700">
+            <div className="flex gap-2 justify-center flex-wrap mb-2">
+              {reactions.map((reaction) => (
+                <button
+                  key={reaction}
+                  type="button"
+                  onClick={() => handleReactionClick(reaction)}
+                  className="text-2xl hover:scale-125 transition-transform p-1 hover:bg-gray-700/50 rounded"
+                  aria-label={`Send ${REACTION_LABELS[reaction] || "emoji"} reaction`}
+                >
+                  {reaction}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={onOpenEmojiUpload}
+              className="w-full text-blue-400 hover:text-blue-300 text-xs font-medium py-1.5 hover:bg-gray-700/50 rounded transition"
+            >
+              + Add Custom Emoji
+            </button>
           </div>
         )}
         <div className="p-3 flex gap-2">
