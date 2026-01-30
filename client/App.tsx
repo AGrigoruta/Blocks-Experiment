@@ -625,13 +625,16 @@ function App() {
   };
 
   const handleCustomEmojiUpload = (emoji: string, label: string) => {
-    if (socket.socketRef.current) {
-      socket.socketRef.current.emit("upload_custom_emoji", {
-        emoji,
-        label,
-        uploadedBy: myName,
-      });
+    if (!socket.socketRef.current) {
+      setUploadError("You are not connected to the server. Please reconnect before uploading.");
+      return;
     }
+    
+    socket.socketRef.current.emit("upload_custom_emoji", {
+      emoji,
+      label,
+      uploadedBy: myName,
+    });
   };
 
   // Render lobby

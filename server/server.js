@@ -334,32 +334,9 @@ io.on("connection", (socket) => {
   });
 
   socket.on("upload_custom_emoji", (data) => {
-    // Rate limiting check
-    const now = Date.now();
-    const socketLimits = uploadRateLimits.get(socket.id) || { count: 0, windowStart: now };
-    
-    // Reset window if expired
-    if (now - socketLimits.windowStart > UPLOAD_RATE_WINDOW) {
-      socketLimits.count = 0;
-      socketLimits.windowStart = now;
-    }
-    
-    // Check if limit exceeded
-    if (socketLimits.count >= UPLOAD_RATE_LIMIT) {
-      socket.emit("custom_emoji_uploaded", { 
-        success: false, 
-        error: "Too many upload attempts. Please wait a moment and try again." 
-      });
-      return;
-    }
-    
-    // Increment counter
-    socketLimits.count++;
-    uploadRateLimits.set(socket.id, socketLimits);
-    
     const { emoji, label, uploadedBy } = data;
     
-    // Validate input
+    // Validate input before rate limiting
     if (!emoji || typeof emoji !== "string" || emoji.trim().length === 0) {
       socket.emit("custom_emoji_uploaded", { 
         success: false, 
@@ -384,16 +361,22 @@ io.on("connection", (socket) => {
       return;
     }
     
-    // Validate length constraints
-    if (emoji.length > 10) {
+    // Trim inputs for validation and storage
+    const trimmedEmoji = emoji.trim();
+    const trimmedLabel = label.trim();
+    const trimmedUploadedBy = uploadedBy.trim();
+    
+    // Validate length constraints on trimmed values
+    const codepointCount = [...trimmedEmoji].length;
+    if (codepointCount > 5) {
       socket.emit("custom_emoji_uploaded", { 
         success: false, 
-        error: "Emoji is too long (max 10 characters)" 
+        error: "Emoji is too long (max 5 characters)" 
       });
       return;
     }
     
-    if (label.length > 50) {
+    if (trimmedLabel.length > 50) {
       socket.emit("custom_emoji_uploaded", { 
         success: false, 
         error: "Label is too long (max 50 characters)" 
@@ -401,7 +384,7 @@ io.on("connection", (socket) => {
       return;
     }
     
-    if (uploadedBy.length > 100) {
+    if (trimmedUploadedBy.length > 100) {
       socket.emit("custom_emoji_uploaded", { 
         success: false, 
         error: "Uploader name is too long (max 100 characters)" 
@@ -411,7 +394,7 @@ io.on("connection", (socket) => {
     
     // Emoji validation - require the entire string to be composed of emoji characters
     const emojiRegex = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Presentation}]+$/u;
-    if (!emojiRegex.test(emoji)) {
+    if (!emojiRegex.test(trimmedEmoji)) {
       socket.emit("custom_emoji_uploaded", { 
         success: false, 
         error: "Please provide a valid emoji" 
@@ -419,7 +402,30 @@ io.on("connection", (socket) => {
       return;
     }
     
-    saveCustomEmoji({ emoji, label, uploadedBy })
+    // Rate limiting check after validation
+    const now = Date.now();
+    const socketLimits = uploadRateLimits.get(socket.id) || { count: 0, windowStart: now };
+    
+    // Reset window if expired
+    if (now - socketLimits.windowStart > UPLOAD_RATE_WINDOW) {
+      socketLimits.count = 0;
+      socketLimits.windowStart = now;
+    }
+    
+    // Check if limit exceeded
+    if (socketLimits.count >= UPLOAD_RATE_LIMIT) {
+      socket.emit("custom_emoji_uploaded", { 
+        success: false, 
+        error: "Too many upload attempts. Please wait a moment and try again." 
+      });
+      return;
+    }
+    
+    // Increment counter only after validation
+    socketLimits.count++;
+    uploadRateLimits.set(socket.id, socketLimits);
+    
+    saveCustomEmoji({ emoji: trimmedEmoji, label: trimmedLabel, uploadedBy: trimmedUploadedBy })
       .then((savedEmoji) => {
         if (savedEmoji === null) {
           // Emoji already exists

@@ -43,9 +43,9 @@ pool
     `
   CREATE TABLE IF NOT EXISTS custom_emojis (
     id SERIAL PRIMARY KEY,
-    emoji TEXT NOT NULL,
-    label TEXT NOT NULL,
-    uploadedBy TEXT NOT NULL,
+    emoji TEXT NOT NULL CHECK (char_length(emoji) <= 10),
+    label TEXT NOT NULL CHECK (char_length(label) <= 50),
+    uploadedBy TEXT NOT NULL CHECK (char_length(uploadedBy) <= 100),
     createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(emoji)
   )
@@ -218,6 +218,11 @@ export async function getLeaderboard(limit = 10) {
  * @returns {Object|null} The inserted emoji object {id, emoji, label, uploadedBy, createdAt} or null if emoji already exists
  */
 export async function saveCustomEmoji(emoji) {
+  // Ensure fields are trimmed before saving to the database
+  const trimmedEmoji = typeof emoji.emoji === "string" ? emoji.emoji.trim() : emoji.emoji;
+  const trimmedLabel = typeof emoji.label === "string" ? emoji.label.trim() : emoji.label;
+  const trimmedUploadedBy = typeof emoji.uploadedBy === "string" ? emoji.uploadedBy.trim() : emoji.uploadedBy;
+
   // Insert new emoji atomically; if it already exists, do nothing
   const insertQuery = `
     INSERT INTO custom_emojis (emoji, label, uploadedBy)
@@ -226,7 +231,7 @@ export async function saveCustomEmoji(emoji) {
     RETURNING *
   `;
 
-  const values = [emoji.emoji, emoji.label, emoji.uploadedBy];
+  const values = [trimmedEmoji, trimmedLabel, trimmedUploadedBy];
   const result = await pool.query(insertQuery, values);
 
   // If no row was returned, the emoji already existed

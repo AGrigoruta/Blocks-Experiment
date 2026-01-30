@@ -41,12 +41,6 @@ export const CustomEmojiUpload: React.FC<CustomEmojiUploadProps> = ({
     // Trim the emoji to handle whitespace
     const trimmedEmoji = emoji.trim();
     
-    // Check length - should be reasonable for emoji sequences
-    if (trimmedEmoji.length > 10) {
-      setError("Emoji is too long");
-      return;
-    }
-    
     // Check if it's a valid emoji (basic check)
     const emojiRegex = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Presentation}]+$/u;
     if (!emojiRegex.test(trimmedEmoji)) {
@@ -54,9 +48,10 @@ export const CustomEmojiUpload: React.FC<CustomEmojiUploadProps> = ({
       return;
     }
     
-    // Prevent very long emoji sequences (more than 5 codepoints)
-    if ([...trimmedEmoji].length > 5) {
-      setError("Please use a single emoji or short emoji sequence");
+    // Limit emoji to max 5 codepoints for reasonable length
+    const codepointCount = [...trimmedEmoji].length;
+    if (codepointCount > 5) {
+      setError("Please use a single emoji or short emoji sequence (max 5 characters)");
       return;
     }
     
