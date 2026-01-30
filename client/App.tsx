@@ -448,10 +448,10 @@ function App() {
     }
   };
 
-  const handleJoinFromLobby = (roomId: string, roomCode?: string) => {
+  const handleJoinFromLobby = (roomId: string, roomCode?: string, asSpectator?: boolean) => {
     closeLobby();
     setGameMode("online");
-    socket.joinGame(roomId, roomCode);
+    socket.joinGame(roomId, roomCode, asSpectator);
   };
 
   // Menu handlers
@@ -653,6 +653,7 @@ function App() {
       aiPlayer={aiPlayer}
       aiDifficulty={aiDifficulty}
       canExplode={gameState.canExplode}
+      isSpectator={socket.networkRole === "spectator"}
       ghost={gameState.getGhost()}
       onHover={(x) => gameState.setHoverX(x)}
       onClick={gameState.handlePlace}

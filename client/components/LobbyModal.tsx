@@ -11,13 +11,14 @@ export interface RoomInfo {
     initialTime: number;
     increment: number;
   };
+  canSpectate?: boolean;
 }
 
 interface LobbyModalProps {
   isOpen: boolean;
   onClose: () => void;
   rooms: RoomInfo[];
-  onJoinRoom: (roomId: string, roomCode?: string) => void;
+  onJoinRoom: (roomId: string, roomCode?: string, asSpectator?: boolean) => void;
   isLoading: boolean;
 }
 
@@ -32,36 +33,40 @@ export const LobbyModal: React.FC<LobbyModalProps> = ({
   const [roomCodeInput, setRoomCodeInput] = useState("");
   const [showCodePrompt, setShowCodePrompt] = useState(false);
   const [filterPrivate, setFilterPrivate] = useState(false);
+  const [spectateMode, setSpectateMode] = useState(false);
 
   useEffect(() => {
     if (!isOpen) {
       setSelectedRoom(null);
       setRoomCodeInput("");
       setShowCodePrompt(false);
+      setSpectateMode(false);
     }
   }, [isOpen]);
 
   if (!isOpen) return null;
 
-  const handleJoinClick = (room: RoomInfo) => {
-    if (room.playerCount >= room.maxPlayers) {
-      return; // Room is full
+  const handleJoinClick = (room: RoomInfo, asSpectator: boolean = false) => {
+    if (room.playerCount >= room.maxPlayers && !asSpectator) {
+      return; // Room is full and not spectating
     }
 
     if (room.isPrivate) {
       setSelectedRoom(room.roomId);
+      setSpectateMode(asSpectator);
       setShowCodePrompt(true);
     } else {
-      onJoinRoom(room.roomId);
+      onJoinRoom(room.roomId, undefined, asSpectator);
     }
   };
 
   const handleCodeSubmit = () => {
     if (selectedRoom && roomCodeInput.trim()) {
-      onJoinRoom(selectedRoom, roomCodeInput.trim().toUpperCase());
+      onJoinRoom(selectedRoom, roomCodeInput.trim().toUpperCase(), spectateMode);
       setShowCodePrompt(false);
       setRoomCodeInput("");
       setSelectedRoom(null);
+      setSpectateMode(false);
     }
   };
 
@@ -198,19 +203,30 @@ export const LobbyModal: React.FC<LobbyModalProps> = ({
                             {room.playerCount}/{room.maxPlayers} players
                           </div>
                         </div>
-                        <button
-                          onClick={() => handleJoinClick(room)}
-                          disabled={room.playerCount >= room.maxPlayers}
-                          className={`px-4 py-2 rounded-lg text-xs font-bold uppercase transition ${
-                            room.playerCount >= room.maxPlayers
-                              ? "bg-gray-700 text-gray-500 cursor-not-allowed"
-                              : "bg-blue-600 text-white hover:bg-blue-700"
-                          }`}
-                        >
-                          {room.playerCount >= room.maxPlayers
-                            ? "Full"
-                            : "Join"}
-                        </button>
+                        {room.playerCount >= room.maxPlayers ? (
+                          room.canSpectate ? (
+                            <button
+                              onClick={() => handleJoinClick(room, true)}
+                              className="px-4 py-2 rounded-lg text-xs font-bold uppercase transition bg-purple-600 text-white hover:bg-purple-700"
+                            >
+                              Spectate
+                            </button>
+                          ) : (
+                            <button
+                              disabled
+                              className="px-4 py-2 rounded-lg text-xs font-bold uppercase bg-gray-700 text-gray-500 cursor-not-allowed"
+                            >
+                              Full
+                            </button>
+                          )
+                        ) : (
+                          <button
+                            onClick={() => handleJoinClick(room, false)}
+                            className="px-4 py-2 rounded-lg text-xs font-bold uppercase transition bg-blue-600 text-white hover:bg-blue-700"
+                          >
+                            Join
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -254,19 +270,30 @@ export const LobbyModal: React.FC<LobbyModalProps> = ({
                             {room.playerCount}/{room.maxPlayers} players
                           </div>
                         </div>
-                        <button
-                          onClick={() => handleJoinClick(room)}
-                          disabled={room.playerCount >= room.maxPlayers}
-                          className={`px-4 py-2 rounded-lg text-xs font-bold uppercase transition ${
-                            room.playerCount >= room.maxPlayers
-                              ? "bg-gray-700 text-gray-500 cursor-not-allowed"
-                              : "bg-amber-600 text-white hover:bg-amber-700"
-                          }`}
-                        >
-                          {room.playerCount >= room.maxPlayers
-                            ? "Full"
-                            : "Join"}
-                        </button>
+                        {room.playerCount >= room.maxPlayers ? (
+                          room.canSpectate ? (
+                            <button
+                              onClick={() => handleJoinClick(room, true)}
+                              className="px-4 py-2 rounded-lg text-xs font-bold uppercase transition bg-purple-600 text-white hover:bg-purple-700"
+                            >
+                              Spectate
+                            </button>
+                          ) : (
+                            <button
+                              disabled
+                              className="px-4 py-2 rounded-lg text-xs font-bold uppercase bg-gray-700 text-gray-500 cursor-not-allowed"
+                            >
+                              Full
+                            </button>
+                          )
+                        ) : (
+                          <button
+                            onClick={() => handleJoinClick(room, false)}
+                            className="px-4 py-2 rounded-lg text-xs font-bold uppercase transition bg-amber-600 text-white hover:bg-amber-700"
+                          >
+                            Join
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}
