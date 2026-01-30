@@ -229,6 +229,15 @@ io.on("connection", (socket) => {
       }
     }
     
+    // Reset game state when RESET action is received
+    if (room && type === "RESET") {
+      room.gameStarted = false;
+      room.gameStartTime = null;
+      room.whiteBlocks = 0;
+      room.blackBlocks = 0;
+      room.disconnectMatchSaved = false;
+    }
+    
     socket.to(roomId).emit("game_action", { type, ...data });
   });
 
