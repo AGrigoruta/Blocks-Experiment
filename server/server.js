@@ -90,6 +90,11 @@ const rooms = new Map();
 //   disconnectMatchSaved: boolean (prevents duplicate saves on disconnect)
 // }
 
+// Rate limiting for custom emoji uploads
+const uploadRateLimits = new Map();
+const UPLOAD_RATE_LIMIT = 5; // Max uploads per window
+const UPLOAD_RATE_WINDOW = 60000; // 1 minute in milliseconds
+
 io.on("connection", (socket) => {
   console.log("Client connected:", socket.id);
 
@@ -329,6 +334,29 @@ io.on("connection", (socket) => {
   });
 
   socket.on("upload_custom_emoji", (data) => {
+    // Rate limiting check
+    const now = Date.now();
+    const socketLimits = uploadRateLimits.get(socket.id) || { count: 0, windowStart: now };
+    
+    // Reset window if expired
+    if (now - socketLimits.windowStart > UPLOAD_RATE_WINDOW) {
+      socketLimits.count = 0;
+      socketLimits.windowStart = now;
+    }
+    
+    // Check if limit exceeded
+    if (socketLimits.count >= UPLOAD_RATE_LIMIT) {
+      socket.emit("custom_emoji_uploaded", { 
+        success: false, 
+        error: "Too many upload attempts. Please wait a moment and try again." 
+      });
+      return;
+    }
+    
+    // Increment counter
+    socketLimits.count++;
+    uploadRateLimits.set(socket.id, socketLimits);
+    
     const { emoji, label, uploadedBy } = data;
     
     // Validate input
@@ -348,7 +376,7 @@ io.on("connection", (socket) => {
       return;
     }
     
-    if (!uploadedBy || typeof uploadedBy !== "string") {
+    if (!uploadedBy || typeof uploadedBy !== "string" || uploadedBy.trim().length === 0) {
       socket.emit("custom_emoji_uploaded", { 
         success: false, 
         error: "Uploader name is required" 
@@ -373,8 +401,16 @@ io.on("connection", (socket) => {
       return;
     }
     
-    // Basic emoji validation - check if it contains emoji characters
-    const emojiRegex = /[\p{Emoji}]/u;
+    if (uploadedBy.length > 100) {
+      socket.emit("custom_emoji_uploaded", { 
+        success: false, 
+        error: "Uploader name is too long (max 100 characters)" 
+      });
+      return;
+    }
+    
+    // Emoji validation - require the entire string to be composed of emoji characters
+    const emojiRegex = /^[\p{Emoji}]+$/u;
     if (!emojiRegex.test(emoji)) {
       socket.emit("custom_emoji_uploaded", { 
         success: false, 
@@ -398,7 +434,11 @@ io.on("connection", (socket) => {
         socket.emit("custom_emoji_uploaded", { success: true, emoji: savedEmoji });
       })
       .catch((error) => {
-        socket.emit("custom_emoji_uploaded", { success: false, error: error.message });
+        console.error("Error saving custom emoji:", error);
+        socket.emit("custom_emoji_uploaded", { 
+          success: false, 
+          error: "Failed to save emoji. Please try again." 
+        });
       });
   });
 
@@ -408,7 +448,11 @@ io.on("connection", (socket) => {
         socket.emit("custom_emojis_data", { emojis });
       })
       .catch((error) => {
-        socket.emit("custom_emojis_data", { emojis: [], error: error.message });
+        console.error("Error fetching custom emojis:", error);
+        socket.emit("custom_emojis_data", { 
+          emojis: [], 
+          error: "Failed to load custom emojis" 
+        });
       });
   });
 
@@ -418,6 +462,9 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
+    // Clean up rate limiting data
+    uploadRateLimits.delete(socket.id);
+    
     rooms.forEach((room, roomId) => {
       if (room.white === socket.id || room.black === socket.id) {
         handleDisconnect(socket, roomId);

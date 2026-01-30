@@ -258,9 +258,6 @@ function App() {
     // Listen for custom emoji updates
     const handleCustomEmojisData = (data: { emojis: CustomEmoji[] }) => {
       setCustomEmojis(data.emojis);
-      // Combine default reactions with custom emojis
-      const customEmojiList = data.emojis.map((e) => e.emoji);
-      setAllReactions([...DEFAULT_REACTIONS, ...customEmojiList]);
     };
 
     const handleCustomEmojiAdded = (emoji: CustomEmoji) => {

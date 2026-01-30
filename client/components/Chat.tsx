@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
 import { REACTION_LABELS } from "../constants";
-import { CustomEmoji } from "../types";
 
 export interface ChatMessage {
   id: string;

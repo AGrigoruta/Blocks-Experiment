@@ -61,22 +61,47 @@ export const CustomEmojiUpload: React.FC<CustomEmojiUploadProps> = ({
     }
     
     onUpload(trimmedEmoji, label.trim());
-    setEmoji("");
-    setLabel("");
-    setError("");
-    onClose();
+    // Don't close modal or clear form here - wait for server response
   };
+
+  // Handle Escape key to close modal
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isOpen) {
+        onClose();
+      }
+    };
+    
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [isOpen, onClose]);
+
+  // Reset form when modal closes successfully
+  useEffect(() => {
+    if (!isOpen) {
+      setEmoji("");
+      setLabel("");
+      setError("");
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 max-w-md w-full shadow-2xl animate-in zoom-in-95 fade-in duration-200">
+    <div 
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <div 
+        className="bg-gray-900 border border-gray-700 rounded-2xl p-6 max-w-md w-full shadow-2xl animate-in zoom-in-95 fade-in duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-white text-xl font-bold">Add Custom Emoji</h2>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-white transition p-1 hover:bg-gray-700 rounded-full"
+            aria-label="Close modal"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
