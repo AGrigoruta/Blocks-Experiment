@@ -151,6 +151,7 @@ io.on("connection", (socket) => {
     const roomId = typeof data === "string" ? data : data.roomId;
     const playerName = typeof data === "object" ? data.playerName : "Black";
     const roomCode = typeof data === "object" ? data.roomCode : null;
+    const asSpectator = typeof data === "object" ? data.asSpectator : false;
 
     const room = rooms.get(roomId);
 
@@ -159,17 +160,50 @@ io.on("connection", (socket) => {
       return;
     }
 
+    // Check if room is private and room code is required
+    if (room.isPrivate && room.roomCode !== roomCode) {
+      socket.emit("error", { message: "Invalid room code" });
+      return;
+    }
+
+    // Handle spectator join
+    if (asSpectator) {
+      room.spectators.push(socket.id);
+      socket.join(roomId);
+      
+      // Send current game state to spectator
+      let whiteStats = null;
+      let blackStats = null;
+      if (room.white && room.black) {
+        try {
+          whiteStats = await getPlayerStats(room.whiteName);
+          blackStats = await getPlayerStats(room.blackName);
+        } catch (err) {
+          console.error("Error fetching stats for spectator:", err);
+        }
+      }
+
+      socket.emit("joined_as_spectator", {
+        roomId,
+        whiteId: room.white,
+        blackId: room.black,
+        whiteName: room.whiteName,
+        blackName: room.blackName,
+        whiteStats,
+        blackStats,
+        timeSettings: room.timeSettings,
+        gameStarted: room.black !== null,
+      });
+      
+      console.log(`Spectator ${socket.id} joined room ${roomId}`);
+      return;
+    }
+
     // Check if joining player has the same name as the host
     if (room.whiteName.toLowerCase() === playerName.toLowerCase()) {
       socket.emit("error", {
         message: "You cannot use the same name as the host",
       });
-      return;
-    }
-
-    // Check if room is private and room code is required
-    if (room.isPrivate && room.roomCode !== roomCode) {
-      socket.emit("error", { message: "Invalid room code" });
       return;
     }
 
@@ -389,6 +423,10 @@ io.on("connection", (socket) => {
     rooms.forEach((room, roomId) => {
       if (room.white === socket.id || room.black === socket.id) {
         handleDisconnect(socket, roomId);
+      } else if (room.spectators.includes(socket.id)) {
+        // Remove spectator from room
+        room.spectators = room.spectators.filter(id => id !== socket.id);
+        console.log(`Spectator ${socket.id} left room ${roomId}`);
       }
     });
   });
@@ -447,7 +485,6 @@ async function handleDisconnect(socket, roomId) {
 
 function sendRoomList(socket) {
   const roomList = Array.from(rooms.values())
-    .filter((room) => !room.black) // Only show rooms waiting for players
     .map((room) => ({
       roomId: room.id,
       hostName: room.whiteName,
@@ -455,6 +492,7 @@ function sendRoomList(socket) {
       playerCount: room.black ? 2 : 1,
       maxPlayers: 2,
       timeSettings: room.timeSettings,
+      canSpectate: room.black !== null, // Can spectate if game has started
     }));
 
   socket.emit("room_list", { rooms: roomList });
@@ -462,7 +500,6 @@ function sendRoomList(socket) {
 
 function broadcastRoomList() {
   const roomList = Array.from(rooms.values())
-    .filter((room) => !room.black) // Only show rooms waiting for players
     .map((room) => ({
       roomId: room.id,
       hostName: room.whiteName,
@@ -470,6 +507,7 @@ function broadcastRoomList() {
       playerCount: room.black ? 2 : 1,
       maxPlayers: 2,
       timeSettings: room.timeSettings,
+      canSpectate: room.black !== null, // Can spectate if game has started
     }));
 
   io.emit("room_list", { rooms: roomList });

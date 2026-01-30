@@ -38,6 +38,7 @@ interface GameViewProps {
   aiPlayer: Player;
   aiDifficulty: AIDifficulty;
   canExplode: boolean;
+  isSpectator?: boolean;
 
   // Ghost/hover state
   ghost: {
@@ -97,6 +98,7 @@ export const GameView = ({
   aiPlayer,
   aiDifficulty,
   canExplode,
+  isSpectator = false,
   ghost,
   onHover,
   onClick,
@@ -149,10 +151,10 @@ export const GameView = ({
       >
         <GameScene
           blocks={blocks}
-          ghost={ghost}
+          ghost={isSpectator ? null : ghost}
           currentPlayer={currentPlayer}
-          onHover={onHover}
-          onClick={onClick}
+          onHover={isSpectator ? () => {} : onHover}
+          onClick={isSpectator ? () => {} : onClick}
           winningCells={winningCells}
           canExplode={canExplode}
         />
@@ -472,70 +474,71 @@ export const GameView = ({
           </div>
         )}
 
-        <div className="pointer-events-auto w-full max-w-lg flex items-center justify-between gap-4">
-          {!winner ? (
-            <>
-              <button
-                onClick={onRotate}
-                disabled={
-                  (gameMode === "online" && currentPlayer !== myPlayer) ||
-                  isAiThinking
-                }
-                className={`flex-1 h-14 font-bold rounded-2xl shadow-lg backdrop-blur-sm border border-white/10 transition-transform active:scale-95 flex items-center justify-center gap-2
-                  ${
+        {!isSpectator && (
+          <div className="pointer-events-auto w-full max-w-lg flex items-center justify-between gap-4">
+            {!winner ? (
+              <>
+                <button
+                  onClick={onRotate}
+                  disabled={
                     (gameMode === "online" && currentPlayer !== myPlayer) ||
                     isAiThinking
-                      ? "bg-gray-700/50 text-gray-500 cursor-not-allowed"
-                      : "bg-blue-600/90 hover:bg-blue-500 active:bg-blue-400 text-white"
-                  }`}
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-6 w-6"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
+                  }
+                  className={`flex-1 h-14 font-bold rounded-2xl shadow-lg backdrop-blur-sm border border-white/10 transition-transform active:scale-95 flex items-center justify-center gap-2
+                    ${
+                      (gameMode === "online" && currentPlayer !== myPlayer) ||
+                      isAiThinking
+                        ? "bg-gray-700/50 text-gray-500 cursor-not-allowed"
+                        : "bg-blue-600/90 hover:bg-blue-500 active:bg-blue-400 text-white"
+                    }`}
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                  />
-                </svg>
-                ROTATE
-              </button>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-6 w-6"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                    />
+                  </svg>
+                  ROTATE
+                </button>
 
-              <button
-                onClick={onClick}
-                disabled={
-                  !ghost?.isValid ||
-                  (gameMode === "online" && currentPlayer !== myPlayer) ||
-                  isAiThinking
-                }
-                className={`flex-[2] h-14 font-bold rounded-2xl shadow-lg backdrop-blur-sm border border-white/10 transition-all active:scale-95 flex items-center justify-center gap-2
-                  ${
-                    ghost?.isValid &&
-                    (gameMode !== "online" || currentPlayer === myPlayer) &&
-                    !isAiThinking
-                      ? "bg-emerald-600/90 hover:bg-emerald-500 active:bg-emerald-400 text-white cursor-pointer"
-                      : "bg-gray-700/50 text-gray-400 cursor-not-allowed opacity-50"
-                  }`}
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-6 w-6"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
+                <button
+                  onClick={onClick}
+                  disabled={
+                    !ghost?.isValid ||
+                    (gameMode === "online" && currentPlayer !== myPlayer) ||
+                    isAiThinking
+                  }
+                  className={`flex-[2] h-14 font-bold rounded-2xl shadow-lg backdrop-blur-sm border border-white/10 transition-all active:scale-95 flex items-center justify-center gap-2
+                    ${
+                      ghost?.isValid &&
+                      (gameMode !== "online" || currentPlayer === myPlayer) &&
+                      !isAiThinking
+                        ? "bg-emerald-600/90 hover:bg-emerald-500 active:bg-emerald-400 text-white cursor-pointer"
+                        : "bg-gray-700/50 text-gray-400 cursor-not-allowed opacity-50"
+                    }`}
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 14l-7 7m0 0l-7-7m7 7V3"
-                  />
-                </svg>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-6 w-6"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 14l-7 7m0 0l-7-7m7 7V3"
+                    />
+                  </svg>
                 PLACE BLOCK
               </button>
             </>
@@ -616,6 +619,15 @@ export const GameView = ({
               </div>
             )}
         </div>
+        )}
+
+        {isSpectator && (
+          <div className="pointer-events-auto w-full max-w-lg">
+            <div className="bg-purple-600/20 backdrop-blur-md border border-purple-500/30 text-purple-200 px-6 py-3 rounded-2xl text-center font-bold shadow-xl">
+              👁️ SPECTATING - View Only Mode
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
