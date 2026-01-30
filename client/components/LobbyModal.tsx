@@ -227,7 +227,6 @@ export const LobbyModal: React.FC<LobbyModalProps> = ({
                             Join
                           </button>
                         )}
-                        </button>
                       </div>
                     </div>
                   ))}
@@ -295,7 +294,6 @@ export const LobbyModal: React.FC<LobbyModalProps> = ({
                             Join
                           </button>
                         )}
-                        </button>
                       </div>
                     </div>
                   ))}
