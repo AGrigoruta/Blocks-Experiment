@@ -43,9 +43,10 @@ pool
     `
   CREATE TABLE IF NOT EXISTS custom_emojis (
     id SERIAL PRIMARY KEY,
-    emoji TEXT NOT NULL CHECK (char_length(emoji) <= 10),
+    emoji TEXT NOT NULL,
     label TEXT NOT NULL CHECK (char_length(label) <= 50),
     uploadedBy TEXT NOT NULL CHECK (char_length(uploadedBy) <= 100),
+    isImage BOOLEAN DEFAULT FALSE,
     createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(emoji)
   )
@@ -212,26 +213,28 @@ export async function getLeaderboard(limit = 10) {
 /**
  * Save a custom emoji to the database
  * @param {Object} emoji - Emoji data
- * @param {string} emoji.emoji - The emoji character(s)
+ * @param {string} emoji.emoji - The emoji character(s) or image data URL
  * @param {string} emoji.label - Label/description for the emoji
  * @param {string} emoji.uploadedBy - Name of the user who uploaded it
- * @returns {Object|null} The inserted emoji object {id, emoji, label, uploadedBy, createdAt} or null if emoji already exists
+ * @param {boolean} emoji.isImage - Whether this is an image (true) or emoji unicode (false)
+ * @returns {Object|null} The inserted emoji object {id, emoji, label, uploadedBy, isImage, createdAt} or null if emoji already exists
  */
 export async function saveCustomEmoji(emoji) {
   // Ensure fields are trimmed before saving to the database
   const trimmedEmoji = typeof emoji.emoji === "string" ? emoji.emoji.trim() : emoji.emoji;
   const trimmedLabel = typeof emoji.label === "string" ? emoji.label.trim() : emoji.label;
   const trimmedUploadedBy = typeof emoji.uploadedBy === "string" ? emoji.uploadedBy.trim() : emoji.uploadedBy;
+  const isImage = emoji.isImage || false;
 
   // Insert new emoji atomically; if it already exists, do nothing
   const insertQuery = `
-    INSERT INTO custom_emojis (emoji, label, uploadedBy)
-    VALUES ($1, $2, $3)
+    INSERT INTO custom_emojis (emoji, label, uploadedBy, isImage)
+    VALUES ($1, $2, $3, $4)
     ON CONFLICT (emoji) DO NOTHING
     RETURNING *
   `;
 
-  const values = [trimmedEmoji, trimmedLabel, trimmedUploadedBy];
+  const values = [trimmedEmoji, trimmedLabel, trimmedUploadedBy, isImage];
   const result = await pool.query(insertQuery, values);
 
   // If no row was returned, the emoji already existed
@@ -248,7 +251,7 @@ export async function saveCustomEmoji(emoji) {
  */
 export async function getAllCustomEmojis() {
   const query = `
-    SELECT id, emoji, label, uploadedBy, createdAt
+    SELECT id, emoji, label, uploadedBy, isImage, createdAt
     FROM custom_emojis
     ORDER BY createdAt ASC
   `;
