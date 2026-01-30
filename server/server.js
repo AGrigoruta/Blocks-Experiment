@@ -410,7 +410,7 @@ io.on("connection", (socket) => {
     }
     
     // Emoji validation - require the entire string to be composed of emoji characters
-    const emojiRegex = /^[\p{Emoji}]+$/u;
+    const emojiRegex = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Presentation}]+$/u;
     if (!emojiRegex.test(emoji)) {
       socket.emit("custom_emoji_uploaded", { 
         success: false, 
