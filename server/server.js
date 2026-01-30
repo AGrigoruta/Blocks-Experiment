@@ -390,6 +390,15 @@ io.on("connection", (socket) => {
   socket.on("upload_custom_emoji", (data) => {
     const { emoji, label, uploadedBy, isImage } = data;
     
+    // Validate isImage parameter type
+    if (isImage !== undefined && typeof isImage !== "boolean") {
+      socket.emit("custom_emoji_uploaded", { 
+        success: false, 
+        error: "Invalid isImage parameter" 
+      });
+      return;
+    }
+    
     // Validate input before rate limiting
     if (!emoji || typeof emoji !== "string" || emoji.trim().length === 0) {
       socket.emit("custom_emoji_uploaded", { 
@@ -423,16 +432,27 @@ io.on("connection", (socket) => {
     // Different validation for images vs emoji unicode
     if (isImage) {
       // Validate data URL format for images
-      if (!trimmedEmoji.startsWith("data:image/")) {
+      const dataUrlRegex = /^data:image\/(png|jpeg|jpg|gif|webp);base64,/;
+      if (!dataUrlRegex.test(trimmedEmoji)) {
         socket.emit("custom_emoji_uploaded", { 
           success: false, 
-          error: "Invalid image format" 
+          error: "Invalid image format. Only PNG, JPEG, GIF, and WebP images are supported (no SVG)" 
+        });
+        return;
+      }
+      
+      // Block SVG images to prevent XSS attacks
+      if (trimmedEmoji.includes("data:image/svg")) {
+        socket.emit("custom_emoji_uploaded", { 
+          success: false, 
+          error: "SVG images are not supported for security reasons" 
         });
         return;
       }
       
       // Check image size limit (2MB encoded in base64)
-      if (trimmedEmoji.length > 2 * 1024 * 1024 * 1.37) { // base64 is ~1.37x larger
+      // Adjusted to account for base64 overhead (1.37x)
+      if (trimmedEmoji.length > 2.8 * 1024 * 1024) {
         socket.emit("custom_emoji_uploaded", { 
           success: false, 
           error: "Image is too large (max 2MB)" 

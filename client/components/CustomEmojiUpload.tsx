@@ -30,15 +30,16 @@ export const CustomEmojiUpload: React.FC<CustomEmojiUploadProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
-    if (!file.type.startsWith("image/")) {
-      setError("Please select a valid image file");
+    // Validate file type - only allow safe image formats (no SVG for security)
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      setError("Please select a valid image file (PNG, JPEG, GIF, or WebP only)");
       return;
     }
 
-    // Validate file size (2MB)
-    if (file.size > 2 * 1024 * 1024) {
-      setError("Image is too large (max 2MB)");
+    // Validate file size (1.5MB to account for base64 encoding overhead)
+    if (file.size > 1.5 * 1024 * 1024) {
+      setError("Image is too large (max 1.5MB to account for encoding)");
       return;
     }
 
@@ -210,7 +211,7 @@ export const CustomEmojiUpload: React.FC<CustomEmojiUploadProps> = ({
                 <input
                   id="image"
                   type="file"
-                  accept="image/*"
+                  accept="image/png,image/jpeg,image/jpg,image/gif,image/webp"
                   onChange={handleFileChange}
                   className="w-full bg-gray-800 border border-gray-600 text-white rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-500 file:cursor-pointer"
                 />

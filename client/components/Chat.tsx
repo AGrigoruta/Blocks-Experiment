@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { REACTION_LABELS } from "../constants";
+import { isImageEmoji } from "../utils/emojiUtils";
 
 export interface ChatMessage {
   id: string;
@@ -102,7 +103,7 @@ export const Chat: React.FC<ChatProps> = ({
         {messages.map((msg) => {
           const isMe = msg.sender === myName;
           const isReaction = reactions.includes(msg.text);
-          const isImageReaction = isReaction && msg.text.startsWith("data:image/");
+          const isImageReaction = isReaction && isImageEmoji(msg.text);
           return (
             <div
               key={msg.id}
@@ -116,7 +117,7 @@ export const Chat: React.FC<ChatProps> = ({
                 }`}
               >
                 {isImageReaction ? (
-                  <img src={msg.text} alt="reaction" className="w-12 h-12 object-contain" />
+                  <img src={msg.text} alt="Custom emoji reaction" className="w-12 h-12 object-contain" />
                 ) : (
                   msg.text
                 )}
@@ -140,7 +141,7 @@ export const Chat: React.FC<ChatProps> = ({
           <div className="p-2 bg-gray-900/50 border-b border-gray-700">
             <div className="flex gap-2 justify-center flex-wrap mb-2">
               {reactions.map((reaction) => {
-                const isImage = reaction.startsWith("data:image/");
+                const isImage = isImageEmoji(reaction);
                 return (
                   <button
                     key={reaction}
@@ -150,7 +151,7 @@ export const Chat: React.FC<ChatProps> = ({
                     aria-label={`Send ${REACTION_LABELS[reaction] || "emoji"} reaction`}
                   >
                     {isImage ? (
-                      <img src={reaction} alt="custom emoji" className="w-full h-full object-contain" />
+                      <img src={reaction} alt="Custom emoji" className="w-full h-full object-contain" />
                     ) : (
                       reaction
                     )}
