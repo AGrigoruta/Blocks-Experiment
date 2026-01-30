@@ -76,6 +76,7 @@ export interface CustomEmoji {
   emoji: string;
   label: string;
   uploadedBy: string;
+  isImage?: boolean;
   createdAt: string;
 }
 
