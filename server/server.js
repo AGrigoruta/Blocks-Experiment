@@ -85,6 +85,9 @@ const rooms = new Map();
 //   timeSettings: { isTimed: boolean, initialTime: number, increment: number },
 //   createdAt: timestamp,
 //   gameStarted: boolean (tracks if at least one move has been made),
+//   gameStartTime: number | null (timestamp when first move is made),
+//   whiteBlocks: number (count of white player's blocks),
+//   blackBlocks: number (count of black player's blocks),
 //   disconnectMatchSaved: boolean (prevents duplicate saves on disconnect)
 // }
 
@@ -121,6 +124,9 @@ io.on("connection", (socket) => {
       timeSettings,
       createdAt: Date.now(),
       gameStarted: false,
+      gameStartTime: null,
+      whiteBlocks: 0,
+      blackBlocks: 0,
       disconnectMatchSaved: false,
     });
 
@@ -206,9 +212,21 @@ io.on("connection", (socket) => {
     const { roomId, type, ...data } = payload;
     const room = rooms.get(roomId);
     
-    // Mark game as started when first move is made
+    // Mark game as started when first move is made and track the start time
     if (room && type === "MOVE") {
-      room.gameStarted = true;
+      if (!room.gameStarted) {
+        room.gameStarted = true;
+        room.gameStartTime = Date.now();
+      }
+      
+      // Track block counts
+      if (data.block && data.block.player) {
+        if (data.block.player === "white") {
+          room.whiteBlocks++;
+        } else if (data.block.player === "black") {
+          room.blackBlocks++;
+        }
+      }
     }
     
     socket.to(roomId).emit("game_action", { type, ...data });
@@ -240,6 +258,9 @@ io.on("connection", (socket) => {
       room.whiteRematch = false;
       room.blackRematch = false;
       room.gameStarted = false;
+      room.gameStartTime = null;
+      room.whiteBlocks = 0;
+      room.blackBlocks = 0;
       room.disconnectMatchSaved = false;
 
       // Determine starting player: loser of previous match goes first
@@ -358,20 +379,25 @@ async function handleDisconnect(socket, roomId) {
       // Mark as saved to prevent duplicate saves
       room.disconnectMatchSaved = true;
       
+      // Calculate match time from game start time
+      const matchTime = room.gameStartTime 
+        ? Math.round((Date.now() - room.gameStartTime) / 1000)
+        : 0;
+      
       // Save match to database with disconnecting player as loser
       const matchData = {
         whiteName: room.whiteName,
         blackName: room.blackName,
         winner: winner,
-        matchTime: 0, // Time is tracked client-side, not available on disconnect
-        whiteNumberOfBlocks: 0, // Block count is tracked client-side
-        blackNumberOfBlocks: 0, // Block count is tracked client-side
+        matchTime: matchTime,
+        whiteNumberOfBlocks: room.whiteBlocks,
+        blackNumberOfBlocks: room.blackBlocks,
         matchEndTimestamp: new Date().toISOString(),
       };
       
       try {
         await saveMatch(matchData);
-        console.log(`Match saved due to ${disconnectedPlayer} (${room[disconnectedPlayer + 'Name']}) disconnect. Winner: ${winner} (${room[winner + 'Name']})`);
+        console.log(`Match saved due to ${disconnectedPlayer} (${room[disconnectedPlayer + 'Name']}) disconnect. Winner: ${winner} (${room[winner + 'Name']}). Time: ${matchTime}s, White blocks: ${room.whiteBlocks}, Black blocks: ${room.blackBlocks}`);
       } catch (error) {
         console.error("Error saving match on disconnect:", error);
       }
