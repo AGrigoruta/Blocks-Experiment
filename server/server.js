@@ -168,6 +168,12 @@ io.on("connection", (socket) => {
 
     // Handle spectator join
     if (asSpectator) {
+      // Only allow spectators in games that have started (both players present)
+      if (!room.black) {
+        socket.emit("error", { message: "Cannot spectate - game hasn't started yet" });
+        return;
+      }
+      
       room.spectators.push(socket.id);
       socket.join(roomId);
       
@@ -246,6 +252,12 @@ io.on("connection", (socket) => {
     const { roomId, type, ...data } = payload;
     const room = rooms.get(roomId);
     
+    // Validate that the sender is an actual player, not a spectator
+    if (room && socket.id !== room.white && socket.id !== room.black) {
+      console.log(`Spectator ${socket.id} attempted to send game action - blocked`);
+      return;
+    }
+    
     // Mark game as started when first move is made and track the start time
     if (room && type === "MOVE") {
       if (!room.gameStarted) {
@@ -314,6 +326,11 @@ io.on("connection", (socket) => {
   socket.on("request_rematch", async ({ roomId }) => {
     const room = rooms.get(roomId);
     if (!room) return;
+
+    // Only allow players to request rematch, not spectators
+    if (socket.id !== room.white && socket.id !== room.black) {
+      return;
+    }
 
     if (socket.id === room.white) room.whiteRematch = true;
     if (socket.id === room.black) room.blackRematch = true;

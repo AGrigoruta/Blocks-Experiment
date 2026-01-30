@@ -622,10 +622,16 @@ export const GameView = ({
         )}
 
         {isSpectator && (
-          <div className="pointer-events-auto w-full max-w-lg">
+          <div className="pointer-events-auto w-full max-w-lg flex flex-col gap-3">
             <div className="bg-purple-600/20 backdrop-blur-md border border-purple-500/30 text-purple-200 px-6 py-3 rounded-2xl text-center font-bold shadow-xl">
               👁️ SPECTATING - View Only Mode
             </div>
+            <button
+              onClick={onQuit}
+              className="h-14 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-2xl transition text-lg font-bold border border-red-500/20 backdrop-blur-md"
+            >
+              EXIT
+            </button>
           </div>
         )}
       </div>

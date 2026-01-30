@@ -87,9 +87,10 @@ export const useSocket = (options: UseSocketOptions) => {
       setConnectionStatus("connected");
       if (socket.id === data.blackId) {
         setNetworkRole("client");
-      } else {
+      } else if (socket.id === data.whiteId) {
         setNetworkRole("host");
       }
+      // If networkRole is already "spectator", don't change it
       optionsRef.current.onGameStart(data);
     });
 
