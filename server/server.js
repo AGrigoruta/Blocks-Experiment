@@ -208,7 +208,7 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("game_action", (payload) => {
+  socket.on("game_action", async (payload) => {
     const { roomId, type, ...data } = payload;
     const room = rooms.get(roomId);
     
@@ -225,6 +225,30 @@ io.on("connection", (socket) => {
           room.whiteBlocks++;
         } else if (data.block.player === "black") {
           room.blackBlocks++;
+        }
+      }
+      
+      // Check if game has ended and save match using server-side tracked data
+      if (data.gameEnded && data.winner && room.gameStartTime && !room.disconnectMatchSaved) {
+        room.disconnectMatchSaved = true; // Mark as saved to prevent duplicates
+        
+        const matchTime = Math.round((Date.now() - room.gameStartTime) / 1000);
+        
+        const matchData = {
+          whiteName: room.whiteName,
+          blackName: room.blackName,
+          winner: data.winner,
+          matchTime: matchTime,
+          whiteNumberOfBlocks: room.whiteBlocks,
+          blackNumberOfBlocks: room.blackBlocks,
+          matchEndTimestamp: new Date().toISOString(),
+        };
+        
+        try {
+          await saveMatch(matchData);
+          console.log(`Match saved. Winner: ${data.winner}. Time: ${matchTime}s, White blocks: ${room.whiteBlocks}, Black blocks: ${room.blackBlocks}`);
+        } catch (error) {
+          console.error("Error saving match on game end:", error);
         }
       }
     }
