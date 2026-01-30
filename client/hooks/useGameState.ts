@@ -96,10 +96,12 @@ export const useGameState = (options: UseGameStateOptions) => {
       let nextPlayer: Player = currentPlayer === "white" ? "black" : "white";
       let isDraw = false;
       let gameEnded = false;
+      let winner: Player | "draw" | null = null;
 
       if (winResult) {
         setWinner(currentPlayer);
         setWinningCells(winResult);
+        winner = currentPlayer;
         gameEnded = true;
       } else {
         const whiteBlockCount = newBlocks.filter(
@@ -124,11 +126,13 @@ export const useGameState = (options: UseGameStateOptions) => {
               currentPlayerBlockCount >= MAX_BLOCKS_PER_PLAYER
             ) {
               setWinner("draw");
+              winner = "draw";
               isDraw = true;
               gameEnded = true;
             }
           } else {
             setWinner(currentPlayer);
+            winner = currentPlayer;
             gameEnded = true;
           }
         } else {
@@ -138,6 +142,7 @@ export const useGameState = (options: UseGameStateOptions) => {
             const currentCanMove = hasValidMove(newGrid, currentPlayer);
             if (!currentCanMove) {
               setWinner(nextPlayer);
+              winner = nextPlayer;
               gameEnded = true;
             }
           }
@@ -157,6 +162,7 @@ export const useGameState = (options: UseGameStateOptions) => {
           bTime: newBlackTime,
           isDraw,
           gameEnded,
+          winner,
         });
       }
 

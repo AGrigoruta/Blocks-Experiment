@@ -272,47 +272,6 @@ function App() {
     }
   }, [gameState.winner, gameState.gameStartTime, gameMode, socket.roomId]);
 
-  // Save match to database
-  useEffect(() => {
-    if (
-      gameState.winner &&
-      gameState.gameStartTime &&
-      gameMode === "online" &&
-      myPlayer === "white"
-    ) {
-      const matchEndTime = Date.now();
-      const matchDurationSeconds = Math.round(
-        (matchEndTime - gameState.gameStartTime) / 1000
-      );
-      const whiteBlocks = gameState.blocks.filter(
-        (b) => b.player === "white"
-      ).length;
-      const blackBlocks = gameState.blocks.filter(
-        (b) => b.player === "black"
-      ).length;
-
-      const matchData = {
-        whiteName,
-        blackName,
-        winner: gameState.winner,
-        matchTime: matchDurationSeconds,
-        whiteNumberOfBlocks: whiteBlocks,
-        blackNumberOfBlocks: blackBlocks,
-        matchEndTimestamp: new Date(matchEndTime).toISOString(),
-      };
-
-      if (socket.socketRef.current?.connected) {
-        socket.socketRef.current.emit("save_match", matchData);
-      }
-    }
-  }, [
-    gameState.winner,
-    gameState.gameStartTime,
-    gameState.blocks,
-    gameMode,
-    myPlayer,
-  ]);
-
   // Timer effect
   useEffect(() => {
     if (
