@@ -76,6 +76,11 @@ pool
           ALTER TABLE custom_emojis DROP CONSTRAINT custom_emojis_emoji_key;
         END IF;
         
+        -- Drop old CHECK constraint on emoji if it exists
+        IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'custom_emojis_emoji_check') THEN
+          ALTER TABLE custom_emojis DROP CONSTRAINT custom_emojis_emoji_check;
+        END IF;
+        
         -- Add UNIQUE constraint on emojiHash if it doesn't exist
         IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'custom_emojis_emojihash_key') THEN
           ALTER TABLE custom_emojis ADD CONSTRAINT custom_emojis_emojihash_key UNIQUE(emojiHash);
