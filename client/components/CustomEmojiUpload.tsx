@@ -28,18 +28,29 @@ export const CustomEmojiUpload: React.FC<CustomEmojiUploadProps> = ({
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file) {
+      e.currentTarget.value = "";
+      setEmoji("");
+      setImagePreview(null);
+      return;
+    }
 
     // Validate file type - only allow safe image formats (no SVG for security)
     const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'];
     if (!allowedTypes.includes(file.type)) {
       setError("Please select a valid image file (PNG, JPEG, GIF, or WebP only)");
+      e.currentTarget.value = "";
+      setEmoji("");
+      setImagePreview(null);
       return;
     }
 
     // Validate file size (1.5MB to account for base64 encoding overhead)
     if (file.size > 1.5 * 1024 * 1024) {
       setError("Image is too large (max 1.5MB to account for encoding)");
+      e.currentTarget.value = "";
+      setEmoji("");
+      setImagePreview(null);
       return;
     }
 
@@ -53,6 +64,9 @@ export const CustomEmojiUpload: React.FC<CustomEmojiUploadProps> = ({
     };
     reader.onerror = () => {
       setError("Failed to read image file");
+      e.currentTarget.value = "";
+      setEmoji("");
+      setImagePreview(null);
     };
     reader.readAsDataURL(file);
   };

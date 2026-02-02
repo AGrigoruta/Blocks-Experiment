@@ -140,11 +140,11 @@ export const Chat: React.FC<ChatProps> = ({
         {showReactions && (
           <div className="p-2 bg-gray-900/50 border-b border-gray-700">
             <div className="flex gap-2 justify-center flex-wrap mb-2">
-              {reactions.map((reaction) => {
+              {reactions.map((reaction, index) => {
                 const isImage = isImageEmoji(reaction);
                 return (
                   <button
-                    key={reaction}
+                    key={index}
                     type="button"
                     onClick={() => handleReactionClick(reaction)}
                     className={`${isImage ? "w-10 h-10" : "text-2xl"} hover:scale-125 transition-transform p-1 hover:bg-gray-700/50 rounded flex items-center justify-center`}

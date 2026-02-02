@@ -450,12 +450,12 @@ io.on("connection", (socket) => {
         return;
       }
       
-      // Check image size limit (2MB encoded in base64)
-      // Adjusted to account for base64 overhead (1.37x)
+      // Check image size limit (~2MB raw image → ~2.8MB base64-encoded)
+      // Adjusted to account for base64 overhead (≈1.37x)
       if (trimmedEmoji.length > 2.8 * 1024 * 1024) {
         socket.emit("custom_emoji_uploaded", { 
           success: false, 
-          error: "Image is too large (max 2MB)" 
+          error: "Image is too large (max ~2MB before encoding, ~2.8MB as base64)" 
         });
         return;
       }
