@@ -583,7 +583,7 @@ function App() {
     gameState.resetGame();
   };
 
-  const handleCustomEmojiUpload = (emoji: string, label: string) => {
+  const handleCustomEmojiUpload = (emoji: string, label: string, isImage: boolean) => {
     if (!socket.socketRef.current) {
       setUploadError("You are not connected to the server. Please reconnect before uploading.");
       return;
@@ -593,6 +593,7 @@ function App() {
       emoji,
       label,
       uploadedBy: myName,
+      isImage,
     });
   };
 

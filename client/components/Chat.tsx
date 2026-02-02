@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { REACTION_LABELS } from "../constants";
+import { isImageEmoji } from "../utils/emojiUtils";
 
 export interface ChatMessage {
   id: string;
@@ -102,19 +103,24 @@ export const Chat: React.FC<ChatProps> = ({
         {messages.map((msg) => {
           const isMe = msg.sender === myName;
           const isReaction = reactions.includes(msg.text);
+          const isImageReaction = isReaction && isImageEmoji(msg.text);
           return (
             <div
               key={msg.id}
               className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}
             >
               <div
-                className={`${isReaction ? "text-4xl" : "max-w-[85%] px-3 py-2 rounded-xl text-sm break-words shadow-sm"} ${
+                className={`${isReaction ? (isImageReaction ? "" : "text-4xl") : "max-w-[85%] px-3 py-2 rounded-xl text-sm break-words shadow-sm"} ${
                   isReaction ? "" : isMe
                     ? "bg-blue-600/90 text-white rounded-tr-none"
                     : "bg-gray-700/80 text-gray-200 rounded-tl-none"
                 }`}
               >
-                {msg.text}
+                {isImageReaction ? (
+                  <img src={msg.text} alt="Custom emoji reaction" className="w-12 h-12 object-contain" />
+                ) : (
+                  msg.text
+                )}
               </div>
               <span className="text-[10px] text-gray-500 mt-1 px-1 opacity-70">
                 {isMe ? "You" : msg.sender}
@@ -134,17 +140,24 @@ export const Chat: React.FC<ChatProps> = ({
         {showReactions && (
           <div className="p-2 bg-gray-900/50 border-b border-gray-700">
             <div className="flex gap-2 justify-center flex-wrap mb-2">
-              {reactions.map((reaction) => (
-                <button
-                  key={reaction}
-                  type="button"
-                  onClick={() => handleReactionClick(reaction)}
-                  className="text-2xl hover:scale-125 transition-transform p-1 hover:bg-gray-700/50 rounded"
-                  aria-label={`Send ${REACTION_LABELS[reaction] || "emoji"} reaction`}
-                >
-                  {reaction}
-                </button>
-              ))}
+              {reactions.map((reaction, index) => {
+                const isImage = isImageEmoji(reaction);
+                return (
+                  <button
+                    key={index}
+                    type="button"
+                    onClick={() => handleReactionClick(reaction)}
+                    className={`${isImage ? "w-10 h-10" : "text-2xl"} hover:scale-125 transition-transform p-1 hover:bg-gray-700/50 rounded flex items-center justify-center`}
+                    aria-label={`Send ${REACTION_LABELS[reaction] || "emoji"} reaction`}
+                  >
+                    {isImage ? (
+                      <img src={reaction} alt="Custom emoji" className="w-full h-full object-contain" />
+                    ) : (
+                      reaction
+                    )}
+                  </button>
+                );
+              })}
             </div>
             <button
               type="button"
