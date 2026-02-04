@@ -153,7 +153,7 @@ export const GameView = ({
           blocks={blocks}
           ghost={isSpectator ? null : ghost}
           currentPlayer={currentPlayer}
-          onHover={isSpectator ? () => {} : onHover}
+          onHover={isSpectator ? (x: number | null) => {} : onHover}
           onClick={isSpectator ? () => {} : onClick}
           winningCells={winningCells}
           canExplode={canExplode}

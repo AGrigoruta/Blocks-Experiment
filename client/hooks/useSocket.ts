@@ -148,7 +148,7 @@ export const useSocket = (options: UseSocketOptions) => {
       setRoomId(inputRoomId);
       socket.emit("join_room", {
         roomId: inputRoomId,
-        playerName: optionsRef.current.myName,
+        playerName: asSpectator ? "" : optionsRef.current.myName,
         roomCode,
         asSpectator: asSpectator || false,
       });

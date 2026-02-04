@@ -198,7 +198,7 @@ io.on("connection", (socket) => {
         whiteStats,
         blackStats,
         timeSettings: room.timeSettings,
-        gameStarted: room.black !== null,
+        gameStarted: room.gameStarted,
       });
       
       console.log(`Spectator ${socket.id} joined room ${roomId}`);
@@ -314,6 +314,14 @@ io.on("connection", (socket) => {
   socket.on("send_message", (data) => {
     const { roomId, message, playerName } = data;
     if (!roomId) return;
+
+    const room = rooms.get(roomId);
+    
+    // Prevent spectators from sending messages (they are nameless and could cause confusion)
+    if (room && room.spectators.includes(socket.id)) {
+      console.log(`Spectator ${socket.id} attempted to send message - blocked`);
+      return;
+    }
 
     io.to(roomId).emit("receive_message", {
       sender: playerName,
@@ -432,6 +440,18 @@ io.on("connection", (socket) => {
   });
 
   socket.on("leave_room", (roomId) => {
+    const room = rooms.get(roomId);
+    
+    // Check if the leaving socket is a spectator
+    if (room && room.spectators.includes(socket.id)) {
+      // Remove spectator from room without ending the game
+      room.spectators = room.spectators.filter(id => id !== socket.id);
+      socket.leave(roomId);
+      console.log(`Spectator ${socket.id} left room ${roomId}`);
+      return;
+    }
+    
+    // For players, handle disconnect normally
     socket.leave(roomId);
     handleDisconnect(socket, roomId);
   });
