@@ -458,6 +458,7 @@ export const GameView = ({
           myName={myName}
           reactions={reactions}
           onOpenEmojiUpload={onOpenEmojiUpload}
+          isSpectator={isSpectator}
         />
       )}
 

@@ -17,6 +17,7 @@ interface ChatProps {
   myName: string;
   reactions: string[];
   onOpenEmojiUpload: () => void;
+  isSpectator?: boolean;
 }
 
 export const Chat: React.FC<ChatProps> = ({
@@ -27,6 +28,7 @@ export const Chat: React.FC<ChatProps> = ({
   myName,
   reactions,
   onOpenEmojiUpload,
+  isSpectator = false,
 }) => {
   const [inputText, setInputText] = useState("");
   const [showReactions, setShowReactions] = useState(false);
@@ -132,12 +134,13 @@ export const Chat: React.FC<ChatProps> = ({
       </div>
 
       {/* Input Area */}
-      <form
-        onSubmit={handleSubmit}
-        className="border-t border-gray-700 bg-gray-800/30 rounded-b-2xl"
-      >
-        {/* Reaction Picker */}
-        {showReactions && (
+      {!isSpectator ? (
+        <form
+          onSubmit={handleSubmit}
+          className="border-t border-gray-700 bg-gray-800/30 rounded-b-2xl"
+        >
+          {/* Reaction Picker */}
+          {showReactions && (
           <div className="p-2 bg-gray-900/50 border-b border-gray-700">
             <div className="flex gap-2 justify-center flex-wrap mb-2">
               {reactions.map((reaction, index) => {
@@ -202,6 +205,11 @@ export const Chat: React.FC<ChatProps> = ({
           </button>
         </div>
       </form>
+      ) : (
+        <div className="border-t border-gray-700 bg-gray-800/30 rounded-b-2xl p-3 text-center">
+          <span className="text-xs text-gray-500 italic">👁️ Spectator Mode - Read Only</span>
+        </div>
+      )}
     </div>
   );
 };
