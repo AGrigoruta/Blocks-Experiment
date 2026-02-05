@@ -6,6 +6,7 @@ import { LocalGameSetup } from "@/components/LocalGameSetup";
 import { AIGameSetup } from "@/components/AIGameSetup";
 import { MainMenu } from "@/components/MainMenu";
 import { GameView } from "@/components/GameView";
+import { BothPlayersStatsModal } from "@/components/BothPlayersStatsModal";
 import { useSocket } from "@/hooks/useSocket";
 import { useGameState } from "@/hooks/useGameState";
 import { getBestMove } from "@/utils/aiPlayer";
@@ -72,6 +73,7 @@ function App() {
   const [myPlayer, setMyPlayer] = useState<Player>("white");
   const [whiteStats, setWhiteStats] = useState<PlayerStats | null>(null);
   const [blackStats, setBlackStats] = useState<PlayerStats | null>(null);
+  const [showBothPlayersStats, setShowBothPlayersStats] = useState(false);
   const [rematchRequested, setRematchRequested] = useState(false);
   const [opponentRematchRequested, setOpponentRematchRequested] =
     useState(false);
@@ -141,26 +143,30 @@ function App() {
       const timeToSet = data.timeSettings?.isTimed
         ? data.timeSettings.initialTime
         : 999999;
-      
+
       // If we have blocks (spectator joining mid-game), use them
       if (data.blocks && data.blocks.length > 0) {
         const newGrid = rebuildGridFromBlocks(data.blocks);
         gameState.setGrid(newGrid);
         gameState.setBlocks(data.blocks);
         gameState.setCurrentPlayer(data.currentPlayer || "white");
-        gameState.setWhiteTime(data.whiteTime !== undefined ? data.whiteTime : timeToSet);
-        gameState.setBlackTime(data.blackTime !== undefined ? data.blackTime : timeToSet);
+        gameState.setWhiteTime(
+          data.whiteTime !== undefined ? data.whiteTime : timeToSet,
+        );
+        gameState.setBlackTime(
+          data.blackTime !== undefined ? data.blackTime : timeToSet,
+        );
       } else {
         // Fresh game start (or spectator join before first move)
         gameState.setGrid(createEmptyGrid());
         gameState.setBlocks([]);
         gameState.setCurrentPlayer(
-          data.startingPlayer || data.currentPlayer || "white"
+          data.startingPlayer || data.currentPlayer || "white",
         );
         gameState.setWhiteTime(timeToSet);
         gameState.setBlackTime(timeToSet);
       }
-      
+
       gameState.setWinner(null);
       gameState.setWinningCells(null);
       gameState.setOrientation("vertical");
@@ -420,19 +426,35 @@ function App() {
     aiDifficulty,
   ]);
 
-  // Show opponent stats
+  // Show stats when game starts
   useEffect(() => {
     if (gameMode === "online" && !isInLobby && !hasShownStatsRef.current) {
-      const opponent = myPlayer === "white" ? "black" : "white";
-      if (opponent === "white" && whiteStats) {
-        setViewStatsPlayer("white");
-        hasShownStatsRef.current = true;
-      } else if (opponent === "black" && blackStats) {
-        setViewStatsPlayer("black");
-        hasShownStatsRef.current = true;
+      if (socket.networkRole === "spectator") {
+        // Spectators see both players' stats
+        if (whiteStats && blackStats) {
+          setShowBothPlayersStats(true);
+          hasShownStatsRef.current = true;
+        }
+      } else {
+        // Regular players see opponent's stats
+        const opponent = myPlayer === "white" ? "black" : "white";
+        if (opponent === "white" && whiteStats) {
+          setViewStatsPlayer("white");
+          hasShownStatsRef.current = true;
+        } else if (opponent === "black" && blackStats) {
+          setViewStatsPlayer("black");
+          hasShownStatsRef.current = true;
+        }
       }
     }
-  }, [isInLobby, gameMode, myPlayer, whiteStats, blackStats]);
+  }, [
+    isInLobby,
+    gameMode,
+    myPlayer,
+    whiteStats,
+    blackStats,
+    socket.networkRole,
+  ]);
 
   // Fetch leaderboard
   const fetchLeaderboard = useCallback(() => {
@@ -788,6 +810,15 @@ function App() {
         viewStatsPlayer={viewStatsPlayer}
         setViewStatsPlayer={setViewStatsPlayer}
       />
+      {showBothPlayersStats && whiteStats && blackStats && (
+        <BothPlayersStatsModal
+          whiteName={whiteName}
+          blackName={blackName}
+          whiteStats={whiteStats}
+          blackStats={blackStats}
+          onClose={() => setShowBothPlayersStats(false)}
+        />
+      )}
       <CustomEmojiUpload
         isOpen={showEmojiUpload}
         onClose={() => {

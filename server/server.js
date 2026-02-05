@@ -151,7 +151,7 @@ io.on("connection", (socket) => {
       `Room ${roomId} created by ${socket.id} (${playerName}) - ${
         isPrivate ? "Private" : "Public"
       } with time settings`,
-      timeSettings
+      timeSettings,
     );
 
     // Broadcast updated room list to all clients
@@ -184,24 +184,24 @@ io.on("connection", (socket) => {
     // Handle spectator join
     if (asSpectator) {
       // Only allow spectators in games that have started (both players present)
-      if (!room.black) {
-        socket.emit("error", { message: "Cannot spectate - game hasn't started yet" });
+      if (!room.black || !room.white) {
+        socket.emit("error", {
+          message: "Cannot spectate - game hasn't started yet",
+        });
         return;
       }
-      
+
       room.spectators.push(socket.id);
       socket.join(roomId);
-      
+
       // Send current game state to spectator
       let whiteStats = null;
       let blackStats = null;
-      if (room.white && room.black) {
-        try {
-          whiteStats = await getPlayerStats(room.whiteName);
-          blackStats = await getPlayerStats(room.blackName);
-        } catch (err) {
-          console.error("Error fetching stats for spectator:", err);
-        }
+      try {
+        whiteStats = await getPlayerStats(room.whiteName);
+        blackStats = await getPlayerStats(room.blackName);
+      } catch (err) {
+        console.error("Error fetching stats for spectator:", err);
       }
 
       socket.emit("joined_as_spectator", {
@@ -219,7 +219,7 @@ io.on("connection", (socket) => {
         whiteTime: room.whiteTime,
         blackTime: room.blackTime,
       });
-      
+
       console.log(`Spectator ${socket.id} joined room ${roomId}`);
       return;
     }
@@ -257,7 +257,7 @@ io.on("connection", (socket) => {
         startingPlayer: "white",
       });
       console.log(
-        `Game started in room ${roomId}. ${room.whiteName} vs ${room.blackName}`
+        `Game started in room ${roomId}. ${room.whiteName} vs ${room.blackName}`,
       );
 
       // Broadcast updated room list to all clients
@@ -270,30 +270,32 @@ io.on("connection", (socket) => {
   socket.on("game_action", async (payload) => {
     const { roomId, type, ...data } = payload;
     const room = rooms.get(roomId);
-    
+
     // Validate that the sender is an actual player, not a spectator
     if (room && socket.id !== room.white && socket.id !== room.black) {
-      console.log(`Spectator ${socket.id} attempted to send game action - blocked`);
+      console.log(
+        `Spectator ${socket.id} attempted to send game action - blocked`,
+      );
       return;
     }
-    
+
     // Mark game as started when first move is made and track the start time
     if (room && type === "MOVE") {
       if (!room.gameStarted) {
         room.gameStarted = true;
         room.gameStartTime = Date.now();
       }
-      
+
       // Store the block in room state for spectator sync
       if (data.block) {
         room.blocks.push(data.block);
       }
-      
+
       // Update current player
       if (data.nextPlayer) {
         room.currentPlayer = data.nextPlayer;
       }
-      
+
       // Update times
       if (data.wTime !== undefined) {
         room.whiteTime = data.wTime;
@@ -301,7 +303,7 @@ io.on("connection", (socket) => {
       if (data.bTime !== undefined) {
         room.blackTime = data.bTime;
       }
-      
+
       // Track block counts
       if (data.block && data.block.player) {
         if (data.block.player === "white") {
@@ -310,13 +312,18 @@ io.on("connection", (socket) => {
           room.blackBlocks++;
         }
       }
-      
+
       // Check if game has ended and save match using server-side tracked data
-      if (data.gameEnded && data.winner && room.gameStartTime && !room.disconnectMatchSaved) {
+      if (
+        data.gameEnded &&
+        data.winner &&
+        room.gameStartTime &&
+        !room.disconnectMatchSaved
+      ) {
         room.disconnectMatchSaved = true; // Mark as saved to prevent duplicates
-        
+
         const matchTime = Math.round((Date.now() - room.gameStartTime) / 1000);
-        
+
         const matchData = {
           whiteName: room.whiteName,
           blackName: room.blackName,
@@ -326,16 +333,18 @@ io.on("connection", (socket) => {
           blackNumberOfBlocks: room.blackBlocks,
           matchEndTimestamp: new Date().toISOString(),
         };
-        
+
         try {
           await saveMatch(matchData);
-          console.log(`Match saved. Winner: ${data.winner}. Time: ${matchTime}s, White blocks: ${room.whiteBlocks}, Black blocks: ${room.blackBlocks}`);
+          console.log(
+            `Match saved. Winner: ${data.winner}. Time: ${matchTime}s, White blocks: ${room.whiteBlocks}, Black blocks: ${room.blackBlocks}`,
+          );
         } catch (error) {
           console.error("Error saving match on game end:", error);
         }
       }
     }
-    
+
     // Reset game state when RESET action is received
     if (room && type === "RESET") {
       room.gameStarted = false;
@@ -345,10 +354,14 @@ io.on("connection", (socket) => {
       room.disconnectMatchSaved = false;
       room.blocks = [];
       room.currentPlayer = "white";
-      room.whiteTime = room.timeSettings.isTimed ? room.timeSettings.initialTime : 999999;
-      room.blackTime = room.timeSettings.isTimed ? room.timeSettings.initialTime : 999999;
+      room.whiteTime = room.timeSettings.isTimed
+        ? room.timeSettings.initialTime
+        : 999999;
+      room.blackTime = room.timeSettings.isTimed
+        ? room.timeSettings.initialTime
+        : 999999;
     }
-    
+
     socket.to(roomId).emit("game_action", { type, ...data });
   });
 
@@ -357,7 +370,7 @@ io.on("connection", (socket) => {
     if (!roomId) return;
 
     const room = rooms.get(roomId);
-    
+
     // Prevent spectators from sending messages (they are nameless and could cause confusion)
     if (room && room.spectators.includes(socket.id)) {
       console.log(`Spectator ${socket.id} attempted to send message - blocked`);
@@ -407,8 +420,12 @@ io.on("connection", (socket) => {
       room.disconnectMatchSaved = false;
       room.blocks = [];
       room.currentPlayer = startingPlayer;
-      room.whiteTime = room.timeSettings.isTimed ? room.timeSettings.initialTime : 999999;
-      room.blackTime = room.timeSettings.isTimed ? room.timeSettings.initialTime : 999999;
+      room.whiteTime = room.timeSettings.isTimed
+        ? room.timeSettings.initialTime
+        : 999999;
+      room.blackTime = room.timeSettings.isTimed
+        ? room.timeSettings.initialTime
+        : 999999;
 
       let whiteStats = null;
       let blackStats = null;
@@ -486,73 +503,79 @@ io.on("connection", (socket) => {
 
   socket.on("upload_custom_emoji", (data) => {
     const { emoji, label, uploadedBy, isImage } = data;
-    
+
     // Validate isImage parameter type
     if (isImage !== undefined && typeof isImage !== "boolean") {
-      socket.emit("custom_emoji_uploaded", { 
-        success: false, 
-        error: "Invalid isImage parameter" 
+      socket.emit("custom_emoji_uploaded", {
+        success: false,
+        error: "Invalid isImage parameter",
       });
       return;
     }
-    
+
     // Validate input before rate limiting
     if (!emoji || typeof emoji !== "string" || emoji.trim().length === 0) {
-      socket.emit("custom_emoji_uploaded", { 
-        success: false, 
-        error: "Emoji is required" 
+      socket.emit("custom_emoji_uploaded", {
+        success: false,
+        error: "Emoji is required",
       });
       return;
     }
-    
+
     if (!label || typeof label !== "string" || label.trim().length === 0) {
-      socket.emit("custom_emoji_uploaded", { 
-        success: false, 
-        error: "Label is required" 
+      socket.emit("custom_emoji_uploaded", {
+        success: false,
+        error: "Label is required",
       });
       return;
     }
-    
-    if (!uploadedBy || typeof uploadedBy !== "string" || uploadedBy.trim().length === 0) {
-      socket.emit("custom_emoji_uploaded", { 
-        success: false, 
-        error: "Uploader name is required" 
+
+    if (
+      !uploadedBy ||
+      typeof uploadedBy !== "string" ||
+      uploadedBy.trim().length === 0
+    ) {
+      socket.emit("custom_emoji_uploaded", {
+        success: false,
+        error: "Uploader name is required",
       });
       return;
     }
-    
+
     // Trim inputs for validation and storage
     const trimmedEmoji = emoji.trim();
     const trimmedLabel = label.trim();
     const trimmedUploadedBy = uploadedBy.trim();
-    
+
     // Different validation for images vs emoji unicode
     if (isImage) {
       // Validate data URL format for images
       const dataUrlRegex = /^data:image\/(png|jpeg|jpg|gif|webp);base64,/;
       if (!dataUrlRegex.test(trimmedEmoji)) {
-        socket.emit("custom_emoji_uploaded", { 
-          success: false, 
-          error: "Invalid image format. Only PNG, JPEG, GIF, and WebP images are supported (no SVG)" 
+        socket.emit("custom_emoji_uploaded", {
+          success: false,
+          error:
+            "Invalid image format. Only PNG, JPEG, GIF, and WebP images are supported (no SVG)",
         });
         return;
       }
-      
+
       // Block SVG images to prevent XSS attacks
       if (trimmedEmoji.includes("data:image/svg")) {
-        socket.emit("custom_emoji_uploaded", { 
-          success: false, 
-          error: "SVG images are not supported for security reasons" 
+        socket.emit("custom_emoji_uploaded", {
+          success: false,
+          error: "SVG images are not supported for security reasons",
         });
         return;
       }
-      
+
       // Check image size limit (~2MB raw image → ~2.8MB base64-encoded)
       // Adjusted to account for base64 overhead (≈1.37x)
       if (trimmedEmoji.length > 2.8 * 1024 * 1024) {
-        socket.emit("custom_emoji_uploaded", { 
-          success: false, 
-          error: "Image is too large (max ~2MB before encoding, ~2.8MB as base64)" 
+        socket.emit("custom_emoji_uploaded", {
+          success: false,
+          error:
+            "Image is too large (max ~2MB before encoding, ~2.8MB as base64)",
         });
         return;
       }
@@ -560,82 +583,94 @@ io.on("connection", (socket) => {
       // Validate emoji unicode
       const codepointCount = [...trimmedEmoji].length;
       if (codepointCount > 5) {
-        socket.emit("custom_emoji_uploaded", { 
-          success: false, 
-          error: "Emoji is too long (max 5 characters)" 
+        socket.emit("custom_emoji_uploaded", {
+          success: false,
+          error: "Emoji is too long (max 5 characters)",
         });
         return;
       }
-      
+
       // Emoji validation - require the entire string to be composed of emoji characters
-      const emojiRegex = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Presentation}]+$/u;
+      const emojiRegex =
+        /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Presentation}]+$/u;
       if (!emojiRegex.test(trimmedEmoji)) {
-        socket.emit("custom_emoji_uploaded", { 
-          success: false, 
-          error: "Please provide a valid emoji" 
+        socket.emit("custom_emoji_uploaded", {
+          success: false,
+          error: "Please provide a valid emoji",
         });
         return;
       }
     }
-    
+
     if (trimmedLabel.length > 50) {
-      socket.emit("custom_emoji_uploaded", { 
-        success: false, 
-        error: "Label is too long (max 50 characters)" 
+      socket.emit("custom_emoji_uploaded", {
+        success: false,
+        error: "Label is too long (max 50 characters)",
       });
       return;
     }
-    
+
     if (trimmedUploadedBy.length > 100) {
-      socket.emit("custom_emoji_uploaded", { 
-        success: false, 
-        error: "Uploader name is too long (max 100 characters)" 
+      socket.emit("custom_emoji_uploaded", {
+        success: false,
+        error: "Uploader name is too long (max 100 characters)",
       });
       return;
     }
-    
+
     // Rate limiting check after validation
     const now = Date.now();
-    const socketLimits = uploadRateLimits.get(socket.id) || { count: 0, windowStart: now };
-    
+    const socketLimits = uploadRateLimits.get(socket.id) || {
+      count: 0,
+      windowStart: now,
+    };
+
     // Reset window if expired
     if (now - socketLimits.windowStart > UPLOAD_RATE_WINDOW) {
       socketLimits.count = 0;
       socketLimits.windowStart = now;
     }
-    
+
     // Check if limit exceeded
     if (socketLimits.count >= UPLOAD_RATE_LIMIT) {
-      socket.emit("custom_emoji_uploaded", { 
-        success: false, 
-        error: "Too many upload attempts. Please wait a moment and try again." 
+      socket.emit("custom_emoji_uploaded", {
+        success: false,
+        error: "Too many upload attempts. Please wait a moment and try again.",
       });
       return;
     }
-    
+
     // Increment counter only after validation
     socketLimits.count++;
     uploadRateLimits.set(socket.id, socketLimits);
-    
-    saveCustomEmoji({ emoji: trimmedEmoji, label: trimmedLabel, uploadedBy: trimmedUploadedBy, isImage: isImage || false })
+
+    saveCustomEmoji({
+      emoji: trimmedEmoji,
+      label: trimmedLabel,
+      uploadedBy: trimmedUploadedBy,
+      isImage: isImage || false,
+    })
       .then((savedEmoji) => {
         if (savedEmoji === null) {
           // Emoji already exists
-          socket.emit("custom_emoji_uploaded", { 
-            success: false, 
-            error: "This emoji has already been added" 
+          socket.emit("custom_emoji_uploaded", {
+            success: false,
+            error: "This emoji has already been added",
           });
           return;
         }
         // Broadcast to all clients that a new emoji is available
         io.emit("custom_emoji_added", savedEmoji);
-        socket.emit("custom_emoji_uploaded", { success: true, emoji: savedEmoji });
+        socket.emit("custom_emoji_uploaded", {
+          success: true,
+          emoji: savedEmoji,
+        });
       })
       .catch((error) => {
         console.error("Error saving custom emoji:", error);
-        socket.emit("custom_emoji_uploaded", { 
-          success: false, 
-          error: "Failed to save emoji. Please try again." 
+        socket.emit("custom_emoji_uploaded", {
+          success: false,
+          error: "Failed to save emoji. Please try again.",
         });
       });
   });
@@ -647,25 +682,25 @@ io.on("connection", (socket) => {
       })
       .catch((error) => {
         console.error("Error fetching custom emojis:", error);
-        socket.emit("custom_emojis_data", { 
-          emojis: [], 
-          error: "Failed to load custom emojis" 
+        socket.emit("custom_emojis_data", {
+          emojis: [],
+          error: "Failed to load custom emojis",
         });
       });
   });
 
   socket.on("leave_room", (roomId) => {
     const room = rooms.get(roomId);
-    
+
     // Check if the leaving socket is a spectator
     if (room && room.spectators.includes(socket.id)) {
       // Remove spectator from room without ending the game
-      room.spectators = room.spectators.filter(id => id !== socket.id);
+      room.spectators = room.spectators.filter((id) => id !== socket.id);
       socket.leave(roomId);
       console.log(`Spectator ${socket.id} left room ${roomId}`);
       return;
     }
-    
+
     // For players, handle disconnect normally
     socket.leave(roomId);
     handleDisconnect(socket, roomId);
@@ -674,13 +709,13 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => {
     // Clean up rate limiting data
     uploadRateLimits.delete(socket.id);
-    
+
     rooms.forEach((room, roomId) => {
       if (room.white === socket.id || room.black === socket.id) {
         handleDisconnect(socket, roomId);
       } else if (room.spectators.includes(socket.id)) {
         // Remove spectator from room
-        room.spectators = room.spectators.filter(id => id !== socket.id);
+        room.spectators = room.spectators.filter((id) => id !== socket.id);
         console.log(`Spectator ${socket.id} left room ${roomId}`);
       }
     });
@@ -696,20 +731,26 @@ async function handleDisconnect(socket, roomId) {
     // 3. Match shouldn't have been saved already (prevents duplicates)
     // 4. Socket must be one of the players (not a spectator or invalid)
     const isPlayer = socket.id === room.white || socket.id === room.black;
-    
-    if (room.white && room.black && room.gameStarted && !room.disconnectMatchSaved && isPlayer) {
+
+    if (
+      room.white &&
+      room.black &&
+      room.gameStarted &&
+      !room.disconnectMatchSaved &&
+      isPlayer
+    ) {
       // Determine who disconnected and who is the winner
       const disconnectedPlayer = socket.id === room.white ? "white" : "black";
       const winner = disconnectedPlayer === "white" ? "black" : "white";
-      
+
       // Mark as saved to prevent duplicate saves
       room.disconnectMatchSaved = true;
-      
+
       // Calculate match time from game start time
-      const matchTime = room.gameStartTime 
+      const matchTime = room.gameStartTime
         ? Math.round((Date.now() - room.gameStartTime) / 1000)
         : 0;
-      
+
       // Save match to database with disconnecting player as loser
       const matchData = {
         whiteName: room.whiteName,
@@ -720,15 +761,17 @@ async function handleDisconnect(socket, roomId) {
         blackNumberOfBlocks: room.blackBlocks,
         matchEndTimestamp: new Date().toISOString(),
       };
-      
+
       try {
         await saveMatch(matchData);
-        console.log(`Match saved due to ${disconnectedPlayer} (${room[disconnectedPlayer + 'Name']}) disconnect. Winner: ${winner} (${room[winner + 'Name']}). Time: ${matchTime}s, White blocks: ${room.whiteBlocks}, Black blocks: ${room.blackBlocks}`);
+        console.log(
+          `Match saved due to ${disconnectedPlayer} (${room[disconnectedPlayer + "Name"]}) disconnect. Winner: ${winner} (${room[winner + "Name"]}). Time: ${matchTime}s, White blocks: ${room.whiteBlocks}, Black blocks: ${room.blackBlocks}`,
+        );
       } catch (error) {
         console.error("Error saving match on disconnect:", error);
       }
     }
-    
+
     io.to(roomId).emit("opponent_left");
     rooms.delete(roomId);
     console.log(`Room ${roomId} closed due to disconnect`);
@@ -739,31 +782,29 @@ async function handleDisconnect(socket, roomId) {
 }
 
 function sendRoomList(socket) {
-  const roomList = Array.from(rooms.values())
-    .map((room) => ({
-      roomId: room.id,
-      hostName: room.whiteName,
-      isPrivate: room.isPrivate,
-      playerCount: room.black ? 2 : 1,
-      maxPlayers: 2,
-      timeSettings: room.timeSettings,
-      canSpectate: room.black !== null, // Can spectate if game has started
-    }));
+  const roomList = Array.from(rooms.values()).map((room) => ({
+    roomId: room.id,
+    hostName: room.whiteName,
+    isPrivate: room.isPrivate,
+    playerCount: room.black ? 2 : 1,
+    maxPlayers: 2,
+    timeSettings: room.timeSettings,
+    canSpectate: room.black !== null, // Can spectate if game has started
+  }));
 
   socket.emit("room_list", { rooms: roomList });
 }
 
 function broadcastRoomList() {
-  const roomList = Array.from(rooms.values())
-    .map((room) => ({
-      roomId: room.id,
-      hostName: room.whiteName,
-      isPrivate: room.isPrivate,
-      playerCount: room.black ? 2 : 1,
-      maxPlayers: 2,
-      timeSettings: room.timeSettings,
-      canSpectate: room.black !== null, // Can spectate if game has started
-    }));
+  const roomList = Array.from(rooms.values()).map((room) => ({
+    roomId: room.id,
+    hostName: room.whiteName,
+    isPrivate: room.isPrivate,
+    playerCount: room.black ? 2 : 1,
+    maxPlayers: 2,
+    timeSettings: room.timeSettings,
+    canSpectate: room.black !== null, // Can spectate if game has started
+  }));
 
   io.emit("room_list", { rooms: roomList });
 }

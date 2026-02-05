@@ -22,16 +22,16 @@ const ReactionItem: React.FC<{
   useEffect(() => {
     // Trigger fade in immediately
     setIsVisible(true);
-    
+
     // Start fade out after 700ms (to complete in 1 second total)
     const fadeOutTimer = setTimeout(() => {
       setIsVisible(false);
-    }, 700);
+    }, 2700);
 
     // Complete and remove after fade out animation (300ms)
     const completeTimer = setTimeout(() => {
       onComplete();
-    }, 1000);
+    }, 3000);
 
     return () => {
       clearTimeout(fadeOutTimer);
@@ -54,9 +54,13 @@ const ReactionItem: React.FC<{
       <div className="flex items-center gap-3 bg-black/40 backdrop-blur-sm rounded-2xl px-4 py-3 shadow-xl border border-white/10">
         <div className="animate-in zoom-in-50 fade-in duration-200 w-12 h-12 flex items-center justify-center">
           {isImageEmoji(reaction.emoji) ? (
-            <img src={reaction.emoji} alt="Custom emoji reaction" className="w-full h-full object-contain" />
+            <img
+              src={reaction.emoji}
+              alt="Custom emoji reaction"
+              className="w-full h-full object-contain"
+            />
           ) : (
-            <span style={{ fontSize: '48px' }}>{reaction.emoji}</span>
+            <span style={{ fontSize: "48px" }}>{reaction.emoji}</span>
           )}
         </div>
         <div className="text-white text-sm font-semibold max-w-[100px] truncate">

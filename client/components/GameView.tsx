@@ -236,8 +236,8 @@ export const GameView = ({
                       ? "CPU"
                       : "YOU"
                     : myPlayer === "white"
-                    ? "YOU"
-                    : "OPP"}
+                      ? "YOU"
+                      : "OPP"}
                 </span>
               )}
             </div>
@@ -314,8 +314,8 @@ export const GameView = ({
                       ? "CPU"
                       : "YOU"
                     : myPlayer === "black"
-                    ? "YOU"
-                    : "OPP"}
+                      ? "YOU"
+                      : "OPP"}
                 </span>
               )}
             </div>
@@ -390,8 +390,8 @@ export const GameView = ({
               {winner === "draw"
                 ? "NO MOVES POSSIBLE"
                 : isTimed && (whiteTime === 0 || blackTime === 0)
-                ? "ON TIME"
-                : "BY CONNECT FIVE"}
+                  ? "ON TIME"
+                  : "BY CONNECT FIVE"}
             </div>
             {(gameMode === "online" || gameMode === "ai") &&
               winner !== "draw" &&
@@ -545,86 +545,86 @@ export const GameView = ({
                       d="M19 14l-7 7m0 0l-7-7m7 7V3"
                     />
                   </svg>
-                PLACE BLOCK
-              </button>
-            </>
-          ) : (
-            <div className="w-full flex gap-3">
-              {gameMode === "local" || gameMode === "ai" ? (
-                <button
-                  onClick={onReset}
-                  className="w-full h-16 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white text-xl font-bold rounded-2xl shadow-xl transition-all transform hover:scale-[1.02] flex items-center justify-center gap-3"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-8 w-8"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                    />
-                  </svg>
-                  PLAY AGAIN
+                  PLACE BLOCK
                 </button>
-              ) : (
-                <>
+              </>
+            ) : (
+              <div className="w-full flex gap-3">
+                {gameMode === "local" || gameMode === "ai" ? (
                   <button
-                    onClick={onQuit}
-                    className="flex-1 h-16 bg-gray-700/80 hover:bg-gray-600/80 backdrop-blur-md text-white text-lg font-bold rounded-2xl shadow-xl transition-all border border-white/10"
+                    onClick={onReset}
+                    className="w-full h-16 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white text-xl font-bold rounded-2xl shadow-xl transition-all transform hover:scale-[1.02] flex items-center justify-center gap-3"
                   >
-                    EXIT
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="h-8 w-8"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                      />
+                    </svg>
+                    PLAY AGAIN
                   </button>
-                  <button
-                    onClick={onRequestRematch}
-                    disabled={rematchRequested}
-                    className={`flex-[2] h-16 text-white text-xl font-bold rounded-2xl shadow-xl transition-all transform hover:scale-[1.02] flex items-center justify-center gap-3 ${
-                      rematchRequested
-                        ? "bg-amber-800/80 cursor-default"
-                        : "bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600"
-                    }`}
-                  >
-                    {rematchRequested ? (
-                      <span>WAITING...</span>
-                    ) : (
-                      <>
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          className="h-8 w-8"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                          />
-                        </svg>
-                        REMATCH
-                      </>
-                    )}
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-          {winner &&
-            opponentRematchRequested &&
-            !rematchRequested &&
-            gameMode === "online" && (
-              <div className="absolute -top-12 left-0 w-full text-center">
-                <span className="bg-blue-600 text-white px-4 py-2 rounded-full shadow-lg font-bold animate-bounce text-sm">
-                  Opponent wants a rematch!
-                </span>
+                ) : (
+                  <>
+                    <button
+                      onClick={onQuit}
+                      className="flex-1 h-16 bg-gray-700/80 hover:bg-gray-600/80 backdrop-blur-md text-white text-lg font-bold rounded-2xl shadow-xl transition-all border border-white/10"
+                    >
+                      EXIT
+                    </button>
+                    <button
+                      onClick={onRequestRematch}
+                      disabled={rematchRequested}
+                      className={`flex-[2] h-16 text-white text-xl font-bold rounded-2xl shadow-xl transition-all transform hover:scale-[1.02] flex items-center justify-center gap-3 ${
+                        rematchRequested
+                          ? "bg-amber-800/80 cursor-default"
+                          : "bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600"
+                      }`}
+                    >
+                      {rematchRequested ? (
+                        <span>WAITING...</span>
+                      ) : (
+                        <>
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            className="h-8 w-8"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                            />
+                          </svg>
+                          REMATCH
+                        </>
+                      )}
+                    </button>
+                  </>
+                )}
               </div>
             )}
-        </div>
+            {winner &&
+              opponentRematchRequested &&
+              !rematchRequested &&
+              gameMode === "online" && (
+                <div className="absolute -top-12 left-0 w-full text-center">
+                  <span className="bg-blue-600 text-white px-4 py-2 rounded-full shadow-lg font-bold animate-bounce text-sm">
+                    Opponent wants a rematch!
+                  </span>
+                </div>
+              )}
+          </div>
         )}
 
         {isSpectator && (
