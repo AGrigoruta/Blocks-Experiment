@@ -34,7 +34,7 @@ export const useSocket = (options: UseSocketOptions) => {
   >("idle");
   const [roomId, setRoomId] = useState<string>("");
   const [hostRoomCode, setHostRoomCode] = useState<string | null>(null);
-  const [networkRole, setNetworkRole] = useState<"host" | "client" | null>(
+  const [networkRole, setNetworkRole] = useState<"host" | "client" | "spectator" | null>(
     null
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -77,13 +77,20 @@ export const useSocket = (options: UseSocketOptions) => {
       optionsRef.current.onRoomList(roomList);
     });
 
+    socket.on("joined_as_spectator", (data) => {
+      setConnectionStatus("connected");
+      setNetworkRole("spectator");
+      optionsRef.current.onGameStart(data);
+    });
+
     socket.on("game_start", (data) => {
       setConnectionStatus("connected");
       if (socket.id === data.blackId) {
         setNetworkRole("client");
-      } else {
+      } else if (socket.id === data.whiteId) {
         setNetworkRole("host");
       }
+      // If networkRole is already "spectator", don't change it
       optionsRef.current.onGameStart(data);
     });
 
@@ -131,8 +138,8 @@ export const useSocket = (options: UseSocketOptions) => {
     }
   };
 
-  const joinGame = (inputRoomId: string, roomCode?: string) => {
-    if (!optionsRef.current.myName.trim()) {
+  const joinGame = (inputRoomId: string, roomCode?: string, asSpectator?: boolean) => {
+    if (!optionsRef.current.myName.trim() && !asSpectator) {
       alert("Please enter your name first");
       return;
     }
@@ -141,8 +148,9 @@ export const useSocket = (options: UseSocketOptions) => {
       setRoomId(inputRoomId);
       socket.emit("join_room", {
         roomId: inputRoomId,
-        playerName: optionsRef.current.myName,
+        playerName: asSpectator ? "" : optionsRef.current.myName,
         roomCode,
+        asSpectator: asSpectator || false,
       });
     }
   };

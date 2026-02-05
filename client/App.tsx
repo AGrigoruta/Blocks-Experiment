@@ -80,14 +80,16 @@ function App() {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
-  
+
   // Reactions
-  const [activeReactions, setActiveReactions] = useState<{
-    id: string;
-    emoji: string;
-    sender: string;
-  }[]>([]);
-  
+  const [activeReactions, setActiveReactions] = useState<
+    {
+      id: string;
+      emoji: string;
+      sender: string;
+    }[]
+  >([]);
+
   // Custom Emojis
   const [customEmojis, setCustomEmojis] = useState<CustomEmoji[]>([]);
   const [allReactions, setAllReactions] = useState<string[]>(DEFAULT_REACTIONS);
@@ -173,7 +175,7 @@ function App() {
         } else if (gameEnded) {
           const nextCanMove = hasValidMove(newGrid, nextPlayer);
           const nextPlayerBlockCount = newBlocks.filter(
-            (b) => b.player === nextPlayer
+            (b) => b.player === nextPlayer,
           ).length;
 
           if (!nextCanMove && nextPlayerBlockCount < MAX_BLOCKS_PER_PLAYER) {
@@ -268,7 +270,11 @@ function App() {
       });
     };
 
-    const handleCustomEmojiUploaded = (data: { success: boolean; error?: string; emoji?: CustomEmoji }) => {
+    const handleCustomEmojiUploaded = (data: {
+      success: boolean;
+      error?: string;
+      emoji?: CustomEmoji;
+    }) => {
       if (!data.success) {
         setUploadError(data.error || "Failed to upload emoji");
       } else {
@@ -504,10 +510,14 @@ function App() {
     }
   };
 
-  const handleJoinFromLobby = (roomId: string, roomCode?: string) => {
+  const handleJoinFromLobby = (
+    roomId: string,
+    roomCode?: string,
+    asSpectator?: boolean,
+  ) => {
     closeLobby();
     setGameMode("online");
-    socket.joinGame(roomId, roomCode);
+    socket.joinGame(roomId, roomCode, asSpectator);
   };
 
   // Menu handlers
@@ -583,12 +593,18 @@ function App() {
     gameState.resetGame();
   };
 
-  const handleCustomEmojiUpload = (emoji: string, label: string, isImage: boolean) => {
+  const handleCustomEmojiUpload = (
+    emoji: string,
+    label: string,
+    isImage: boolean,
+  ) => {
     if (!socket.socketRef.current) {
-      setUploadError("You are not connected to the server. Please reconnect before uploading.");
+      setUploadError(
+        "You are not connected to the server. Please reconnect before uploading.",
+      );
       return;
     }
-    
+
     socket.socketRef.current.emit("upload_custom_emoji", {
       emoji,
       label,
@@ -724,6 +740,7 @@ function App() {
         aiPlayer={aiPlayer}
         aiDifficulty={aiDifficulty}
         canExplode={gameState.canExplode}
+        isSpectator={socket.networkRole === "spectator"}
         ghost={gameState.getGhost()}
         onHover={(x) => gameState.setHoverX(x)}
         onClick={gameState.handlePlace}

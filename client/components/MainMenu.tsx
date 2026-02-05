@@ -18,7 +18,7 @@ interface MainMenuProps {
   isRoomsLoading: boolean;
   connectionStatus: "idle" | "connecting" | "waiting" | "connected" | "error";
   errorMessage: string | null;
-  networkRole: "host" | "client" | null;
+  networkRole: "host" | "client" | "spectator" | null;
   isCreatingPrivate: boolean;
   hostRoomCode: string | null;
   isTimed: boolean;
