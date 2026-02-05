@@ -141,15 +141,30 @@ function App() {
       const timeToSet = data.timeSettings?.isTimed
         ? data.timeSettings.initialTime
         : 999999;
-      gameState.setGrid(createEmptyGrid());
-      gameState.setBlocks([]);
-      gameState.setCurrentPlayer(data.startingPlayer || "white");
+      
+      // If we have blocks (spectator joining mid-game), use them
+      if (data.blocks && data.blocks.length > 0) {
+        const newGrid = rebuildGridFromBlocks(data.blocks);
+        gameState.setGrid(newGrid);
+        gameState.setBlocks(data.blocks);
+        gameState.setCurrentPlayer(data.currentPlayer || "white");
+        gameState.setWhiteTime(data.whiteTime !== undefined ? data.whiteTime : timeToSet);
+        gameState.setBlackTime(data.blackTime !== undefined ? data.blackTime : timeToSet);
+      } else {
+        // Fresh game start (or spectator join before first move)
+        gameState.setGrid(createEmptyGrid());
+        gameState.setBlocks([]);
+        gameState.setCurrentPlayer(
+          data.startingPlayer || data.currentPlayer || "white"
+        );
+        gameState.setWhiteTime(timeToSet);
+        gameState.setBlackTime(timeToSet);
+      }
+      
       gameState.setWinner(null);
       gameState.setWinningCells(null);
       gameState.setOrientation("vertical");
       gameState.setHoverX(null);
-      gameState.setWhiteTime(timeToSet);
-      gameState.setBlackTime(timeToSet);
       gameState.setGameStartTime(Date.now());
     },
     onGameAction: (data) => {
