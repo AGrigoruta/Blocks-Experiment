@@ -387,19 +387,6 @@ io.on("connection", (socket) => {
     socket.to(roomId).emit("rematch_requested");
 
     if (room.whiteRematch && room.blackRematch) {
-      // Reset rematch flags and game state
-      room.whiteRematch = false;
-      room.blackRematch = false;
-      room.gameStarted = false;
-      room.gameStartTime = null;
-      room.whiteBlocks = 0;
-      room.blackBlocks = 0;
-      room.disconnectMatchSaved = false;
-      room.blocks = [];
-      room.currentPlayer = "white";
-      room.whiteTime = room.timeSettings.isTimed ? room.timeSettings.initialTime : 999999;
-      room.blackTime = room.timeSettings.isTimed ? room.timeSettings.initialTime : 999999;
-
       // Determine starting player: loser of previous match goes first
       // If previous game was a draw or no previous game, white (host) starts
       let startingPlayer = "white";
@@ -409,9 +396,19 @@ io.on("connection", (socket) => {
         startingPlayer = "white"; // Black won last, so white (loser) starts
       }
       // If lastWinner is null or "draw", white starts (default)
-      
-      // Update the current player based on starting player
+
+      // Reset rematch flags and game state
+      room.whiteRematch = false;
+      room.blackRematch = false;
+      room.gameStarted = false;
+      room.gameStartTime = null;
+      room.whiteBlocks = 0;
+      room.blackBlocks = 0;
+      room.disconnectMatchSaved = false;
+      room.blocks = [];
       room.currentPlayer = startingPlayer;
+      room.whiteTime = room.timeSettings.isTimed ? room.timeSettings.initialTime : 999999;
+      room.blackTime = room.timeSettings.isTimed ? room.timeSettings.initialTime : 999999;
 
       let whiteStats = null;
       let blackStats = null;

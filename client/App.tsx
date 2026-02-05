@@ -151,10 +151,12 @@ function App() {
         gameState.setWhiteTime(data.whiteTime !== undefined ? data.whiteTime : timeToSet);
         gameState.setBlackTime(data.blackTime !== undefined ? data.blackTime : timeToSet);
       } else {
-        // Fresh game start
+        // Fresh game start (or spectator join before first move)
         gameState.setGrid(createEmptyGrid());
         gameState.setBlocks([]);
-        gameState.setCurrentPlayer(data.startingPlayer || "white");
+        gameState.setCurrentPlayer(
+          data.startingPlayer || data.currentPlayer || "white"
+        );
         gameState.setWhiteTime(timeToSet);
         gameState.setBlackTime(timeToSet);
       }
