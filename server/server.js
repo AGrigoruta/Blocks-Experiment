@@ -90,7 +90,11 @@ const rooms = new Map();
 //   gameStartTime: number | null (timestamp when first move is made),
 //   whiteBlocks: number (count of white player's blocks),
 //   blackBlocks: number (count of black player's blocks),
-//   disconnectMatchSaved: boolean (prevents duplicate saves on disconnect)
+//   disconnectMatchSaved: boolean (prevents duplicate saves on disconnect),
+//   blocks: array (tracks all placed blocks for state sync),
+//   currentPlayer: string (tracks whose turn it is),
+//   whiteTime: number (tracks remaining time for white in seconds),
+//   blackTime: number (tracks remaining time for black in seconds)
 // }
 
 // Rate limiting for custom emoji uploads
@@ -135,6 +139,10 @@ io.on("connection", (socket) => {
       whiteBlocks: 0,
       blackBlocks: 0,
       disconnectMatchSaved: false,
+      blocks: [],
+      currentPlayer: "white",
+      whiteTime: timeSettings.isTimed ? timeSettings.initialTime : 999999,
+      blackTime: timeSettings.isTimed ? timeSettings.initialTime : 999999,
     });
 
     socket.join(roomId);
@@ -206,6 +214,10 @@ io.on("connection", (socket) => {
         blackStats,
         timeSettings: room.timeSettings,
         gameStarted: room.gameStarted,
+        blocks: room.blocks,
+        currentPlayer: room.currentPlayer,
+        whiteTime: room.whiteTime,
+        blackTime: room.blackTime,
       });
       
       console.log(`Spectator ${socket.id} joined room ${roomId}`);
@@ -272,6 +284,24 @@ io.on("connection", (socket) => {
         room.gameStartTime = Date.now();
       }
       
+      // Store the block in room state for spectator sync
+      if (data.block) {
+        room.blocks.push(data.block);
+      }
+      
+      // Update current player
+      if (data.nextPlayer) {
+        room.currentPlayer = data.nextPlayer;
+      }
+      
+      // Update times
+      if (data.wTime !== undefined) {
+        room.whiteTime = data.wTime;
+      }
+      if (data.bTime !== undefined) {
+        room.blackTime = data.bTime;
+      }
+      
       // Track block counts
       if (data.block && data.block.player) {
         if (data.block.player === "white") {
@@ -313,6 +343,10 @@ io.on("connection", (socket) => {
       room.whiteBlocks = 0;
       room.blackBlocks = 0;
       room.disconnectMatchSaved = false;
+      room.blocks = [];
+      room.currentPlayer = "white";
+      room.whiteTime = room.timeSettings.isTimed ? room.timeSettings.initialTime : 999999;
+      room.blackTime = room.timeSettings.isTimed ? room.timeSettings.initialTime : 999999;
     }
     
     socket.to(roomId).emit("game_action", { type, ...data });
@@ -361,6 +395,10 @@ io.on("connection", (socket) => {
       room.whiteBlocks = 0;
       room.blackBlocks = 0;
       room.disconnectMatchSaved = false;
+      room.blocks = [];
+      room.currentPlayer = "white";
+      room.whiteTime = room.timeSettings.isTimed ? room.timeSettings.initialTime : 999999;
+      room.blackTime = room.timeSettings.isTimed ? room.timeSettings.initialTime : 999999;
 
       // Determine starting player: loser of previous match goes first
       // If previous game was a draw or no previous game, white (host) starts
@@ -371,6 +409,9 @@ io.on("connection", (socket) => {
         startingPlayer = "white"; // Black won last, so white (loser) starts
       }
       // If lastWinner is null or "draw", white starts (default)
+      
+      // Update the current player based on starting player
+      room.currentPlayer = startingPlayer;
 
       let whiteStats = null;
       let blackStats = null;
