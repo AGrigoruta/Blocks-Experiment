@@ -67,6 +67,8 @@ interface GameViewProps {
   unreadCount: number;
   onSendMessage: (text: string) => void;
   myName: string;
+  reactions: string[];
+  onOpenEmojiUpload: () => void;
 
   // Reactions
   activeReactions: { id: string; emoji: string; sender: string }[];
@@ -114,6 +116,8 @@ export const GameView = ({
   unreadCount,
   onSendMessage,
   myName,
+  reactions,
+  onOpenEmojiUpload,
   activeReactions,
   onReactionComplete,
   showTutorial,
@@ -452,6 +456,8 @@ export const GameView = ({
           messages={chatMessages}
           onSendMessage={onSendMessage}
           myName={myName}
+          reactions={reactions}
+          onOpenEmojiUpload={onOpenEmojiUpload}
         />
       )}
 

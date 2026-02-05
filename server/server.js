@@ -6,6 +6,8 @@ import {
   getMatchesByPlayer,
   getPlayerStats,
   getLeaderboard,
+  saveCustomEmoji,
+  getAllCustomEmojis,
 } from "./db.js";
 
 const PORT = process.env.PORT || 3000;
@@ -90,6 +92,11 @@ const rooms = new Map();
 //   blackBlocks: number (count of black player's blocks),
 //   disconnectMatchSaved: boolean (prevents duplicate saves on disconnect)
 // }
+
+// Rate limiting for custom emoji uploads
+const uploadRateLimits = new Map();
+const UPLOAD_RATE_LIMIT = 5; // Max uploads per window
+const UPLOAD_RATE_WINDOW = 60000; // 1 minute in milliseconds
 
 io.on("connection", (socket) => {
   console.log("Client connected:", socket.id);
@@ -439,6 +446,176 @@ io.on("connection", (socket) => {
       });
   });
 
+  socket.on("upload_custom_emoji", (data) => {
+    const { emoji, label, uploadedBy, isImage } = data;
+    
+    // Validate isImage parameter type
+    if (isImage !== undefined && typeof isImage !== "boolean") {
+      socket.emit("custom_emoji_uploaded", { 
+        success: false, 
+        error: "Invalid isImage parameter" 
+      });
+      return;
+    }
+    
+    // Validate input before rate limiting
+    if (!emoji || typeof emoji !== "string" || emoji.trim().length === 0) {
+      socket.emit("custom_emoji_uploaded", { 
+        success: false, 
+        error: "Emoji is required" 
+      });
+      return;
+    }
+    
+    if (!label || typeof label !== "string" || label.trim().length === 0) {
+      socket.emit("custom_emoji_uploaded", { 
+        success: false, 
+        error: "Label is required" 
+      });
+      return;
+    }
+    
+    if (!uploadedBy || typeof uploadedBy !== "string" || uploadedBy.trim().length === 0) {
+      socket.emit("custom_emoji_uploaded", { 
+        success: false, 
+        error: "Uploader name is required" 
+      });
+      return;
+    }
+    
+    // Trim inputs for validation and storage
+    const trimmedEmoji = emoji.trim();
+    const trimmedLabel = label.trim();
+    const trimmedUploadedBy = uploadedBy.trim();
+    
+    // Different validation for images vs emoji unicode
+    if (isImage) {
+      // Validate data URL format for images
+      const dataUrlRegex = /^data:image\/(png|jpeg|jpg|gif|webp);base64,/;
+      if (!dataUrlRegex.test(trimmedEmoji)) {
+        socket.emit("custom_emoji_uploaded", { 
+          success: false, 
+          error: "Invalid image format. Only PNG, JPEG, GIF, and WebP images are supported (no SVG)" 
+        });
+        return;
+      }
+      
+      // Block SVG images to prevent XSS attacks
+      if (trimmedEmoji.includes("data:image/svg")) {
+        socket.emit("custom_emoji_uploaded", { 
+          success: false, 
+          error: "SVG images are not supported for security reasons" 
+        });
+        return;
+      }
+      
+      // Check image size limit (~2MB raw image → ~2.8MB base64-encoded)
+      // Adjusted to account for base64 overhead (≈1.37x)
+      if (trimmedEmoji.length > 2.8 * 1024 * 1024) {
+        socket.emit("custom_emoji_uploaded", { 
+          success: false, 
+          error: "Image is too large (max ~2MB before encoding, ~2.8MB as base64)" 
+        });
+        return;
+      }
+    } else {
+      // Validate emoji unicode
+      const codepointCount = [...trimmedEmoji].length;
+      if (codepointCount > 5) {
+        socket.emit("custom_emoji_uploaded", { 
+          success: false, 
+          error: "Emoji is too long (max 5 characters)" 
+        });
+        return;
+      }
+      
+      // Emoji validation - require the entire string to be composed of emoji characters
+      const emojiRegex = /^[\p{Emoji}\p{Emoji_Modifier}\p{Emoji_Component}\p{Emoji_Presentation}]+$/u;
+      if (!emojiRegex.test(trimmedEmoji)) {
+        socket.emit("custom_emoji_uploaded", { 
+          success: false, 
+          error: "Please provide a valid emoji" 
+        });
+        return;
+      }
+    }
+    
+    if (trimmedLabel.length > 50) {
+      socket.emit("custom_emoji_uploaded", { 
+        success: false, 
+        error: "Label is too long (max 50 characters)" 
+      });
+      return;
+    }
+    
+    if (trimmedUploadedBy.length > 100) {
+      socket.emit("custom_emoji_uploaded", { 
+        success: false, 
+        error: "Uploader name is too long (max 100 characters)" 
+      });
+      return;
+    }
+    
+    // Rate limiting check after validation
+    const now = Date.now();
+    const socketLimits = uploadRateLimits.get(socket.id) || { count: 0, windowStart: now };
+    
+    // Reset window if expired
+    if (now - socketLimits.windowStart > UPLOAD_RATE_WINDOW) {
+      socketLimits.count = 0;
+      socketLimits.windowStart = now;
+    }
+    
+    // Check if limit exceeded
+    if (socketLimits.count >= UPLOAD_RATE_LIMIT) {
+      socket.emit("custom_emoji_uploaded", { 
+        success: false, 
+        error: "Too many upload attempts. Please wait a moment and try again." 
+      });
+      return;
+    }
+    
+    // Increment counter only after validation
+    socketLimits.count++;
+    uploadRateLimits.set(socket.id, socketLimits);
+    
+    saveCustomEmoji({ emoji: trimmedEmoji, label: trimmedLabel, uploadedBy: trimmedUploadedBy, isImage: isImage || false })
+      .then((savedEmoji) => {
+        if (savedEmoji === null) {
+          // Emoji already exists
+          socket.emit("custom_emoji_uploaded", { 
+            success: false, 
+            error: "This emoji has already been added" 
+          });
+          return;
+        }
+        // Broadcast to all clients that a new emoji is available
+        io.emit("custom_emoji_added", savedEmoji);
+        socket.emit("custom_emoji_uploaded", { success: true, emoji: savedEmoji });
+      })
+      .catch((error) => {
+        console.error("Error saving custom emoji:", error);
+        socket.emit("custom_emoji_uploaded", { 
+          success: false, 
+          error: "Failed to save emoji. Please try again." 
+        });
+      });
+  });
+
+  socket.on("get_custom_emojis", () => {
+    getAllCustomEmojis()
+      .then((emojis) => {
+        socket.emit("custom_emojis_data", { emojis });
+      })
+      .catch((error) => {
+        console.error("Error fetching custom emojis:", error);
+        socket.emit("custom_emojis_data", { 
+          emojis: [], 
+          error: "Failed to load custom emojis" 
+        });
+      });
+  });
+
   socket.on("leave_room", (roomId) => {
     const room = rooms.get(roomId);
     
@@ -457,6 +634,9 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
+    // Clean up rate limiting data
+    uploadRateLimits.delete(socket.id);
+    
     rooms.forEach((room, roomId) => {
       if (room.white === socket.id || room.black === socket.id) {
         handleDisconnect(socket, roomId);
