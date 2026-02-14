@@ -1,69 +1,105 @@
 import "dotenv/config";
+import express from "express";
+import { createServer } from "http";
 import { Server } from "socket.io";
+import cookieParser from "cookie-parser";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
+import passport from "./utils/passport.js";
+import authRoutes from "./routes/auth.js";
+import { socketAuthenticate } from "./middleware/auth.js";
 import {
   saveMatch,
   getAllMatches,
   getMatchesByPlayer,
   getPlayerStats,
+  getUserStats,
   getLeaderboard,
   saveCustomEmoji,
   getAllCustomEmojis,
+  migrateExistingPlayersToGuests,
 } from "./db.js";
 
 const PORT = process.env.PORT || 3000;
 const CORS_ORIGIN = process.env.CORS_ORIGIN || "*";
 
-const io = new Server(PORT, {
+// Create Express app
+const app = express();
+const httpServer = createServer(app);
+
+// Security middleware
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  contentSecurityPolicy: false // Disable for now, can configure later
+}));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(cookieParser());
+
+// CORS middleware for Express
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', CORS_ORIGIN);
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  message: 'Too many requests from this IP, please try again later.'
+});
+app.use('/auth', limiter);
+
+// Initialize Passport
+app.use(passport.initialize());
+
+// Routes
+app.use('/auth', authRoutes);
+
+// Health check
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Leaderboard endpoint (kept for compatibility)
+app.get('/leaderboard', async (req, res) => {
+  try {
+    const leaderboard = await getLeaderboard(10);
+    res.json({ leaderboard });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Migration endpoint (for admin use - should be protected in production)
+app.post('/admin/migrate-users', async (req, res) => {
+  try {
+    const result = await migrateExistingPlayersToGuests();
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Socket.io setup
+const io = new Server(httpServer, {
   cors: {
     origin: CORS_ORIGIN,
     methods: ["GET", "POST"],
     credentials: true,
   },
-  host: "0.0.0.0",
 });
 
-// HTTP server for REST endpoints
-const httpServer = io.httpServer || io.engine.server;
-
-// Add HTTP endpoint for leaderboard - must be registered before Socket.IO handles requests
-if (httpServer) {
-  const originalEmit = httpServer.emit;
-  httpServer.emit = function (event, req, res) {
-    if (event === "request") {
-      // Only handle our specific endpoint
-      if (req.url === "/leaderboard") {
-        // Handle CORS preflight
-        if (req.method === "OPTIONS") {
-          res.setHeader("Access-Control-Allow-Origin", "*");
-          res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-          res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-          res.writeHead(204);
-          res.end();
-          return;
-        }
-
-        if (req.method === "GET") {
-          res.setHeader("Access-Control-Allow-Origin", "*");
-          res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-          res.setHeader("Content-Type", "application/json");
-
-          getLeaderboard(10)
-            .then((leaderboard) => {
-              res.writeHead(200);
-              res.end(JSON.stringify({ leaderboard }));
-            })
-            .catch((error) => {
-              res.writeHead(500);
-              res.end(JSON.stringify({ error: error.message }));
-            });
-          return;
-        }
-      }
-    }
-    // Let Socket.IO handle all other requests
-    return originalEmit.apply(this, arguments);
-  };
-}
+// Socket.io authentication middleware - OPTIONAL for now to maintain backward compatibility
+// Uncomment this line to require authentication for all socket connections
+// io.use(socketAuthenticate);
 
 console.log(`Game Server running on port ${PORT}`);
 
@@ -808,3 +844,8 @@ function broadcastRoomList() {
 
   io.emit("room_list", { rooms: roomList });
 }
+
+// Start server
+httpServer.listen(PORT, '0.0.0.0', () => {
+  console.log(`HTTP and WebSocket server listening on port ${PORT}`);
+});
