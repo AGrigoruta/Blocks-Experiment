@@ -80,6 +80,27 @@ export interface CustomEmoji {
   createdAt: string;
 }
 
+// --- Authentication Types ---
+
+export interface User {
+  id: number;
+  displayName: string;
+  discriminator: string;
+  email?: string;
+  avatarUrl?: string;
+  isGuest: boolean;
+  provider: 'google' | 'github' | 'guest';
+}
+
+export interface AuthState {
+  user: User | null;
+  token: string | null;
+  loading: boolean;
+  error: string | null;
+}
+
+export type AuthProvider = 'google' | 'github' | 'guest';
+
 // --- Network Types ---
 
 export type GameMode = "local" | "online" | "ai";

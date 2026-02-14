@@ -3,6 +3,7 @@ import { Tutorial } from "./Tutorial";
 import { LeaderboardModal } from "./LeaderboardModal";
 import { LobbyModal } from "./LobbyModal";
 import { TimeControlSelector } from "./TimeControlSelector";
+import { UserProfile } from "./UserProfile";
 
 interface MainMenuProps {
   myName: string;
@@ -205,15 +206,8 @@ export const MainMenu = ({
             <div className="flex-grow border-t border-gray-700/50"></div>
           </div>
 
-          <div className="mb-2">
-            <input
-              type="text"
-              value={myName}
-              onChange={(e) => setMyName(e.target.value)}
-              className="w-full bg-gray-900/50 border border-gray-700 text-white px-4 py-3 rounded-xl focus:outline-none focus:border-blue-500 text-center font-bold"
-              placeholder="YOUR NAME"
-              maxLength={12}
-            />
+          <div className="mb-2 flex justify-center">
+            <UserProfile />
           </div>
 
           {connectionStatus === "error" && (
