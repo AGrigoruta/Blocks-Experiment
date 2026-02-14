@@ -44,7 +44,12 @@ export interface PlayerStats {
 }
 
 export interface LeaderboardEntry {
-  playername: string;
+  userId?: number;
+  displayName?: string;
+  discriminator?: string;
+  avatarUrl?: string;
+  oauthProvider?: string;
+  playername: string; // Keep for backward compatibility
   totalMatches: number;
   wins: number;
   draws: number;

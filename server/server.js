@@ -154,14 +154,19 @@ io.on("connection", (socket) => {
       ? Math.random().toString(36).substr(2, 4).toUpperCase()
       : null;
 
+    // Get user ID if authenticated
+    const whiteUserId = socket.userId || null;
+
     rooms.set(roomId, {
       id: roomId,
       isPrivate,
       roomCode,
       white: socket.id,
       whiteName: playerName,
+      whiteUserId: whiteUserId,
       black: null,
       blackName: null,
+      blackUserId: null,
       spectators: [],
       whiteRematch: false,
       blackRematch: false,
@@ -271,6 +276,7 @@ io.on("connection", (socket) => {
     if (!room.black) {
       room.black = socket.id;
       room.blackName = playerName;
+      room.blackUserId = socket.userId || null; // Add user ID for black player
       socket.join(roomId);
 
       let whiteStats = null;
@@ -363,6 +369,8 @@ io.on("connection", (socket) => {
         const matchData = {
           whiteName: room.whiteName,
           blackName: room.blackName,
+          whiteUserId: room.whiteUserId || null,
+          blackUserId: room.blackUserId || null,
           winner: data.winner,
           matchTime: matchTime,
           whiteNumberOfBlocks: room.whiteBlocks,
@@ -684,6 +692,7 @@ io.on("connection", (socket) => {
       emoji: trimmedEmoji,
       label: trimmedLabel,
       uploadedBy: trimmedUploadedBy,
+      uploadedByUserId: socket.userId || null, // Add user ID
       isImage: isImage || false,
     })
       .then((savedEmoji) => {
@@ -791,6 +800,8 @@ async function handleDisconnect(socket, roomId) {
       const matchData = {
         whiteName: room.whiteName,
         blackName: room.blackName,
+        whiteUserId: room.whiteUserId || null,
+        blackUserId: room.blackUserId || null,
         winner: winner,
         matchTime: matchTime,
         whiteNumberOfBlocks: room.whiteBlocks,

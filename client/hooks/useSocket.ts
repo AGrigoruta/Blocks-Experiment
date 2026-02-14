@@ -8,6 +8,8 @@ const SERVER_URL =
 
 interface UseSocketOptions {
   myName: string;
+  authToken?: string | null; // Add auth token
+  userId?: number | null; // Add user ID
   onGameStart: (data: {
     whiteId: string;
     blackId: string;
@@ -52,6 +54,9 @@ export const useSocket = (options: UseSocketOptions) => {
     const socket = io(SERVER_URL, {
       transports: ["websocket"],
       reconnectionAttempts: 5,
+      auth: {
+        token: options.authToken || null
+      }
     });
 
     socket.on("connect", () => {

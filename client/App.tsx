@@ -118,6 +118,8 @@ function App() {
   // Socket Hook
   const socket = useSocket({
     myName,
+    authToken: user?.id ? localStorage.getItem('auth_token') : null,
+    userId: user?.id || null,
     onGameStart: (data) => {
       setIsInLobby(false);
       setWhiteName(data.whiteName || "White");
