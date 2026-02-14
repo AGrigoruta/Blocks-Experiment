@@ -12,6 +12,42 @@ const pool = new Pool({
       : { rejectUnauthorized: false },
 });
 
+// Create users table
+pool
+  .query(
+    `
+  CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY,
+    oauth_provider VARCHAR(50) NOT NULL,
+    oauth_id VARCHAR(255),
+    email VARCHAR(255),
+    display_name VARCHAR(100) NOT NULL,
+    discriminator VARCHAR(10),
+    avatar_url TEXT,
+    is_guest BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_login_at TIMESTAMP,
+    UNIQUE(oauth_provider, oauth_id),
+    UNIQUE(display_name, discriminator)
+  )
+`
+  )
+  .then(() => {
+    console.log("Users table initialized");
+    // Create indexes for performance
+    return pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_users_oauth ON users(oauth_provider, oauth_id);
+      CREATE INDEX IF NOT EXISTS idx_users_display_name ON users(display_name, discriminator);
+    `);
+  })
+  .then(() => {
+    console.log("Users table indexes created");
+  })
+  .catch((err) => {
+    console.error("Error initializing users table:", err);
+  });
+
 // Create matches table
 pool
   .query(
@@ -30,10 +66,30 @@ pool
 `
   )
   .then(() => {
-    console.log("PostgreSQL database initialized");
+    console.log("Matches table initialized");
+    // Migration: Add user_id foreign keys if they don't exist
+    return pool.query(`
+      DO $$ 
+      BEGIN
+        -- Add white_user_id column if it doesn't exist
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                       WHERE table_name='matches' AND column_name='white_user_id') THEN
+          ALTER TABLE matches ADD COLUMN white_user_id INTEGER REFERENCES users(id);
+        END IF;
+        
+        -- Add black_user_id column if it doesn't exist
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                       WHERE table_name='matches' AND column_name='black_user_id') THEN
+          ALTER TABLE matches ADD COLUMN black_user_id INTEGER REFERENCES users(id);
+        END IF;
+      END $$;
+    `);
+  })
+  .then(() => {
+    console.log("Matches table migrations completed");
   })
   .catch((err) => {
-    console.error("Error initializing PostgreSQL:", err);
+    console.error("Error initializing matches table:", err);
     console.error("Make sure DATABASE_URL environment variable is set");
   });
 
@@ -85,6 +141,12 @@ pool
         IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'custom_emojis_emojihash_key') THEN
           ALTER TABLE custom_emojis ADD CONSTRAINT custom_emojis_emojihash_key UNIQUE(emojiHash);
         END IF;
+        
+        -- Add uploaded_by_user_id column if it doesn't exist
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                       WHERE table_name='custom_emojis' AND column_name='uploaded_by_user_id') THEN
+          ALTER TABLE custom_emojis ADD COLUMN uploaded_by_user_id INTEGER REFERENCES users(id);
+        END IF;
       END $$;
     `);
   })
@@ -100,6 +162,8 @@ pool
  * @param {Object} match - Match data
  * @param {string} match.whiteName - Name of the white player
  * @param {string} match.blackName - Name of the black player
+ * @param {number} match.whiteUserId - User ID of white player (optional, for authenticated users)
+ * @param {number} match.blackUserId - User ID of black player (optional, for authenticated users)
  * @param {string} match.winner - Winner ('white', 'black', or 'draw')
  * @param {number} match.matchTime - Duration of the match in seconds
  * @param {number} match.whiteNumberOfBlocks - Number of blocks white player had
@@ -111,20 +175,24 @@ export async function saveMatch(match) {
   const query = `
     INSERT INTO matches (
       whiteName, 
-      blackName, 
+      blackName,
+      white_user_id,
+      black_user_id,
       winner, 
       matchTime, 
       whiteNumberOfBlocks, 
       blackNumberOfBlocks, 
       matchEndTimestamp
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
     RETURNING *
   `;
 
   const values = [
     match.whiteName,
     match.blackName,
+    match.whiteUserId || null,
+    match.blackUserId || null,
     match.winner,
     match.matchTime,
     match.whiteNumberOfBlocks,
@@ -197,38 +265,43 @@ export async function getPlayerStats(playerName) {
 }
 
 /**
- * Get leaderboard with top players by wins
+ * Get leaderboard with top players by wins (authenticated users only)
  * @param {number} limit - Maximum number of players to return (default: 10)
  * @returns {Array} Array of player objects with stats
  */
 export async function getLeaderboard(limit = 10) {
   const query = `
-    WITH player_names AS (
-      SELECT whiteName as playerName FROM matches
-      UNION
-      SELECT blackName as playerName FROM matches
-    ),
-    player_stats AS (
+    WITH user_stats AS (
       SELECT 
-        pn.playerName,
+        u.id,
+        u.display_name,
+        u.discriminator,
+        u.avatar_url,
+        u.oauth_provider,
+        u.is_guest,
         COUNT(m.id)::int as "totalMatches",
         SUM(CASE 
-          WHEN m.winner = 'white' AND m.whiteName = pn.playerName THEN 1 
-          WHEN m.winner = 'black' AND m.blackName = pn.playerName THEN 1 
+          WHEN m.winner = 'white' AND m.white_user_id = u.id THEN 1 
+          WHEN m.winner = 'black' AND m.black_user_id = u.id THEN 1 
           ELSE 0 
         END)::int as wins,
         SUM(CASE WHEN m.winner = 'draw' THEN 1 ELSE 0 END)::int as draws,
         SUM(CASE 
-          WHEN m.winner = 'white' AND m.blackName = pn.playerName THEN 1 
-          WHEN m.winner = 'black' AND m.whiteName = pn.playerName THEN 1 
+          WHEN m.winner = 'white' AND m.black_user_id = u.id THEN 1 
+          WHEN m.winner = 'black' AND m.white_user_id = u.id THEN 1 
           ELSE 0 
         END)::int as losses
-      FROM player_names pn
-      LEFT JOIN matches m ON (m.whiteName = pn.playerName OR m.blackName = pn.playerName)
-      GROUP BY pn.playerName
+      FROM users u
+      LEFT JOIN matches m ON (m.white_user_id = u.id OR m.black_user_id = u.id)
+      WHERE u.is_guest = false
+      GROUP BY u.id, u.display_name, u.discriminator, u.avatar_url, u.oauth_provider, u.is_guest
     )
     SELECT 
-      playerName,
+      id as "userId",
+      display_name as "displayName",
+      discriminator,
+      avatar_url as "avatarUrl",
+      oauth_provider as "oauthProvider",
       "totalMatches",
       wins,
       draws,
@@ -237,7 +310,7 @@ export async function getLeaderboard(limit = 10) {
         WHEN "totalMatches" > 0 THEN ROUND(((wins::float / "totalMatches"::float) * 100)::numeric, 1)
         ELSE 0 
       END as "winRate"
-    FROM player_stats
+    FROM user_stats
     WHERE "totalMatches" > 0
     ORDER BY wins DESC, "winRate" DESC, "totalMatches" DESC
     LIMIT $1
@@ -251,9 +324,10 @@ export async function getLeaderboard(limit = 10) {
  * @param {Object} emoji - Emoji data
  * @param {string} emoji.emoji - The emoji character(s) or image data URL
  * @param {string} emoji.label - Label/description for the emoji
- * @param {string} emoji.uploadedBy - Name of the user who uploaded it
+ * @param {string} emoji.uploadedBy - Name of the user who uploaded it (for display)
+ * @param {number} emoji.uploadedByUserId - User ID who uploaded it (optional, for authenticated users)
  * @param {boolean} emoji.isImage - Whether this is an image (true) or emoji unicode (false)
- * @returns {Object|null} The inserted emoji object {id, emoji, label, uploadedBy, isImage, createdAt} or null if emoji already exists
+ * @returns {Object|null} The inserted emoji object or null if emoji already exists
  */
 export async function saveCustomEmoji(emoji) {
   const crypto = await import("crypto");
@@ -263,19 +337,20 @@ export async function saveCustomEmoji(emoji) {
   const trimmedLabel = typeof emoji.label === "string" ? emoji.label.trim() : emoji.label;
   const trimmedUploadedBy = typeof emoji.uploadedBy === "string" ? emoji.uploadedBy.trim() : emoji.uploadedBy;
   const isImage = emoji.isImage || false;
+  const uploadedByUserId = emoji.uploadedByUserId || null;
 
   // Generate hash for uniqueness checking (avoids btree index size limits with large data URLs)
   const emojiHash = crypto.createHash("sha256").update(trimmedEmoji).digest("hex");
 
   // Insert new emoji atomically; if hash already exists, do nothing
   const insertQuery = `
-    INSERT INTO custom_emojis (emoji, label, uploadedBy, isImage, emojiHash)
-    VALUES ($1, $2, $3, $4, $5)
+    INSERT INTO custom_emojis (emoji, label, uploadedBy, uploaded_by_user_id, isImage, emojiHash)
+    VALUES ($1, $2, $3, $4, $5, $6)
     ON CONFLICT (emojiHash) DO NOTHING
     RETURNING *
   `;
 
-  const values = [trimmedEmoji, trimmedLabel, trimmedUploadedBy, isImage, emojiHash];
+  const values = [trimmedEmoji, trimmedLabel, trimmedUploadedBy, uploadedByUserId, isImage, emojiHash];
   const result = await pool.query(insertQuery, values);
 
   // If no row was returned, the emoji already existed
@@ -298,6 +373,244 @@ export async function getAllCustomEmojis() {
   `;
   const result = await pool.query(query);
   return result.rows;
+}
+
+/**
+ * Create a new user (OAuth or Guest)
+ * @param {Object} userData - User data
+ * @param {string} userData.oauthProvider - 'google', 'github', or 'guest'
+ * @param {string} userData.oauthId - OAuth provider's user ID (null for guests)
+ * @param {string} userData.email - User email (null for guests)
+ * @param {string} userData.displayName - User's chosen display name
+ * @param {string} userData.avatarUrl - Profile picture URL (optional)
+ * @param {boolean} userData.isGuest - Whether this is a guest account
+ * @returns {Object} The created user with discriminator
+ */
+export async function createUser(userData) {
+  const { oauthProvider, oauthId, email, displayName, avatarUrl, isGuest } = userData;
+  
+  // For OAuth users, check if they already exist
+  if (!isGuest && oauthId) {
+    const existingUser = await pool.query(
+      'SELECT * FROM users WHERE oauth_provider = $1 AND oauth_id = $2',
+      [oauthProvider, oauthId]
+    );
+    
+    if (existingUser.rows.length > 0) {
+      // Update last login time
+      const updatedUser = await pool.query(
+        'UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *',
+        [existingUser.rows[0].id]
+      );
+      return updatedUser.rows[0];
+    }
+  }
+  
+  // Generate discriminator for display name uniqueness
+  const discriminator = await generateDiscriminator(displayName);
+  
+  const query = `
+    INSERT INTO users (
+      oauth_provider,
+      oauth_id,
+      email,
+      display_name,
+      discriminator,
+      avatar_url,
+      is_guest,
+      last_login_at
+    )
+    VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
+    RETURNING *
+  `;
+  
+  const values = [
+    oauthProvider,
+    oauthId,
+    email,
+    displayName,
+    discriminator,
+    avatarUrl || null,
+    isGuest || false
+  ];
+  
+  const result = await pool.query(query, values);
+  return result.rows[0];
+}
+
+/**
+ * Generate a unique discriminator for a display name (Discord-style)
+ * @param {string} displayName - The display name
+ * @returns {string} A 4-digit discriminator (e.g., "0001")
+ */
+async function generateDiscriminator(displayName) {
+  // Get all existing discriminators for this display name
+  const result = await pool.query(
+    'SELECT discriminator FROM users WHERE display_name = $1 ORDER BY discriminator',
+    [displayName]
+  );
+  
+  const existingDiscriminators = new Set(result.rows.map(row => row.discriminator));
+  
+  // Find the first available discriminator from 0001 to 9999
+  for (let i = 1; i <= 9999; i++) {
+    const discriminator = i.toString().padStart(4, '0');
+    if (!existingDiscriminators.has(discriminator)) {
+      return discriminator;
+    }
+  }
+  
+  // If all discriminators are taken (very unlikely), throw error
+  throw new Error(`All discriminators for display name "${displayName}" are taken`);
+}
+
+/**
+ * Get user by ID
+ * @param {number} userId - User ID
+ * @returns {Object|null} User object or null if not found
+ */
+export async function getUserById(userId) {
+  const query = 'SELECT * FROM users WHERE id = $1';
+  const result = await pool.query(query, [userId]);
+  return result.rows[0] || null;
+}
+
+/**
+ * Get user by OAuth provider and ID
+ * @param {string} oauthProvider - OAuth provider ('google' or 'github')
+ * @param {string} oauthId - OAuth provider's user ID
+ * @returns {Object|null} User object or null if not found
+ */
+export async function getUserByOAuth(oauthProvider, oauthId) {
+  const query = 'SELECT * FROM users WHERE oauth_provider = $1 AND oauth_id = $2';
+  const result = await pool.query(query, [oauthProvider, oauthId]);
+  return result.rows[0] || null;
+}
+
+/**
+ * Update user's display name
+ * @param {number} userId - User ID
+ * @param {string} newDisplayName - New display name
+ * @returns {Object} Updated user object
+ */
+export async function updateDisplayName(userId, newDisplayName) {
+  // Generate new discriminator for the new name
+  const discriminator = await generateDiscriminator(newDisplayName);
+  
+  const query = `
+    UPDATE users 
+    SET display_name = $1, discriminator = $2, updated_at = CURRENT_TIMESTAMP
+    WHERE id = $3
+    RETURNING *
+  `;
+  
+  const result = await pool.query(query, [newDisplayName, discriminator, userId]);
+  return result.rows[0];
+}
+
+/**
+ * Migrate existing player names to guest accounts
+ * This should be run once during deployment
+ * @returns {Object} Migration statistics
+ */
+export async function migrateExistingPlayersToGuests() {
+  try {
+    // Get all unique player names from matches
+    const playerNames = await pool.query(`
+      SELECT DISTINCT name FROM (
+        SELECT whiteName as name FROM matches
+        UNION
+        SELECT blackName as name FROM matches
+      ) AS all_names
+      WHERE name IS NOT NULL AND name != ''
+      ORDER BY name
+    `);
+    
+    let created = 0;
+    let skipped = 0;
+    
+    for (const { name } of playerNames.rows) {
+      try {
+        // Check if a guest with this display name already exists
+        const existing = await pool.query(
+          'SELECT id FROM users WHERE display_name = $1 AND is_guest = true LIMIT 1',
+          [name]
+        );
+        
+        if (existing.rows.length === 0) {
+          // Create guest account for this player
+          const user = await createUser({
+            oauthProvider: 'guest',
+            oauthId: null,
+            email: null,
+            displayName: name,
+            avatarUrl: null,
+            isGuest: true
+          });
+          
+          // Update matches with this user_id
+          await pool.query(`
+            UPDATE matches
+            SET white_user_id = $1
+            WHERE whiteName = $2 AND white_user_id IS NULL
+          `, [user.id, name]);
+          
+          await pool.query(`
+            UPDATE matches
+            SET black_user_id = $1
+            WHERE blackName = $2 AND black_user_id IS NULL
+          `, [user.id, name]);
+          
+          created++;
+        } else {
+          skipped++;
+        }
+      } catch (err) {
+        console.error(`Error migrating player "${name}":`, err.message);
+      }
+    }
+    
+    return {
+      success: true,
+      created,
+      skipped,
+      total: playerNames.rows.length
+    };
+  } catch (err) {
+    console.error('Error in migrateExistingPlayersToGuests:', err);
+    return {
+      success: false,
+      error: err.message
+    };
+  }
+}
+
+/**
+ * Get user stats by user ID (replaces getPlayerStats for authenticated users)
+ * @param {number} userId - User ID
+ * @returns {Object} Statistics object
+ */
+export async function getUserStats(userId) {
+  const query = `
+    SELECT 
+      COUNT(*)::int as "totalMatches",
+      SUM(CASE WHEN winner = 'white' AND white_user_id = $1 THEN 1 
+               WHEN winner = 'black' AND black_user_id = $1 THEN 1 
+               ELSE 0 END)::int as wins,
+      SUM(CASE WHEN winner = 'draw' THEN 1 ELSE 0 END)::int as draws,
+      SUM(CASE WHEN winner = 'white' AND black_user_id = $1 THEN 1 
+               WHEN winner = 'black' AND white_user_id = $1 THEN 1 
+               ELSE 0 END)::int as losses,
+      COALESCE(AVG(matchTime), 0)::float as "avgMatchTime",
+      COALESCE(AVG(CASE 
+        WHEN white_user_id = $1 THEN whiteNumberOfBlocks 
+        ELSE blackNumberOfBlocks 
+      END), 0)::float as "avgBlocks"
+    FROM matches
+    WHERE white_user_id = $1 OR black_user_id = $1
+  `;
+  const result = await pool.query(query, [userId]);
+  return result.rows[0];
 }
 
 export default pool;
