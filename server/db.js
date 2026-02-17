@@ -43,6 +43,19 @@ pool
   })
   .then(() => {
     console.log("Users table indexes created");
+    // Migration: Add custom_display_name column if it doesn't exist
+    return pool.query(`
+      DO $$ 
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                       WHERE table_name='users' AND column_name='custom_display_name') THEN
+          ALTER TABLE users ADD COLUMN custom_display_name VARCHAR(100);
+        END IF;
+      END $$;
+    `);
+  })
+  .then(() => {
+    console.log("Users table migrations completed");
   })
   .catch((err) => {
     console.error("Error initializing users table:", err);
@@ -279,6 +292,7 @@ export async function getLeaderboard(limit = 10) {
         u.avatar_url,
         u.oauth_provider,
         u.is_guest,
+        u.custom_display_name,
         COUNT(m.id)::int as "totalMatches",
         SUM(CASE 
           WHEN m.winner = 'white' AND m.white_user_id = u.id THEN 1 
@@ -293,15 +307,15 @@ export async function getLeaderboard(limit = 10) {
         END)::int as losses
       FROM users u
       LEFT JOIN matches m ON (m.white_user_id = u.id OR m.black_user_id = u.id)
-      WHERE u.is_guest = false
-      GROUP BY u.id, u.display_name, u.discriminator, u.avatar_url, u.oauth_provider, u.is_guest
+      GROUP BY u.id, u.display_name, u.discriminator, u.avatar_url, u.oauth_provider, u.is_guest, u.custom_display_name
     )
     SELECT 
-      id as "userId",
       display_name as "displayName",
       discriminator,
       avatar_url as "avatarUrl",
       oauth_provider as "oauthProvider",
+      custom_display_name as "customDisplayName",
+      is_guest as "isGuest",
       "totalMatches",
       wins,
       draws,
@@ -498,6 +512,43 @@ export async function getUserById(userId) {
   const query = 'SELECT * FROM users WHERE id = $1';
   const result = await pool.query(query, [userId]);
   return result.rows[0] || null;
+}
+
+/**
+ * Update user's custom display name
+ * @param {number} userId - User ID
+ * @param {string} customDisplayName - New custom display name (or null to use OAuth name)
+ * @returns {Object} Updated user object
+ */
+export async function updateUserDisplayName(userId, customDisplayName) {
+  // Validate display name
+  if (customDisplayName !== null) {
+    if (typeof customDisplayName !== 'string' || customDisplayName.trim().length === 0) {
+      throw new Error('Display name cannot be empty');
+    }
+    
+    if (customDisplayName.trim().length > 100) {
+      throw new Error('Display name cannot exceed 100 characters');
+    }
+    
+    // Trim and normalize
+    customDisplayName = customDisplayName.trim();
+  }
+  
+  const query = `
+    UPDATE users 
+    SET custom_display_name = $1, updated_at = CURRENT_TIMESTAMP 
+    WHERE id = $2 
+    RETURNING *
+  `;
+  
+  const result = await pool.query(query, [customDisplayName, userId]);
+  
+  if (result.rows.length === 0) {
+    throw new Error('User not found');
+  }
+  
+  return result.rows[0];
 }
 
 /**

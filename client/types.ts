@@ -49,6 +49,8 @@ export interface LeaderboardEntry {
   discriminator?: string;
   avatarUrl?: string;
   oauthProvider?: string;
+  customDisplayName?: string;
+  isGuest?: boolean;
   playername: string; // Keep for backward compatibility
   totalMatches: number;
   wins: number;
@@ -95,6 +97,7 @@ export interface User {
   avatarUrl?: string;
   isGuest: boolean;
   provider: 'google' | 'github' | 'guest';
+  customDisplayName?: string;
 }
 
 export interface AuthState {

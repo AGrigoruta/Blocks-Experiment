@@ -6,8 +6,6 @@ interface AIGameSetupProps {
   setAIDifficulty: (difficulty: AIDifficulty) => void;
   aiPlayer: "white" | "black";
   setAIPlayer: (player: "white" | "black") => void;
-  myName: string;
-  setMyName: (name: string) => void;
   isTimed: boolean;
   setIsTimed: (v: boolean) => void;
   initialTimeSetting: number;
@@ -23,8 +21,6 @@ export const AIGameSetup = ({
   setAIDifficulty,
   aiPlayer,
   setAIPlayer,
-  myName,
-  setMyName,
   isTimed,
   setIsTimed,
   initialTimeSetting,
@@ -101,20 +97,6 @@ export const AIGameSetup = ({
             increment={incrementSetting}
             setIncrement={setIncrementSetting}
           />
-
-          <div>
-            <label className="block text-gray-400 text-xs uppercase tracking-widest font-bold mb-2">
-              Your Name
-            </label>
-            <input
-              type="text"
-              value={myName}
-              onChange={(e) => setMyName(e.target.value)}
-              className="w-full bg-gray-900 border border-gray-600 text-white px-4 py-2 rounded-lg focus:outline-none focus:border-indigo-500"
-              placeholder="Enter your name"
-              maxLength={12}
-            />
-          </div>
         </div>
 
         <div className="flex gap-3">

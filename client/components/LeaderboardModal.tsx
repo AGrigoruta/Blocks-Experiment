@@ -117,11 +117,14 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                   <div className="flex flex-col items-center gap-2 group">
                     <div className="text-2xl mb-1">{getRankStyle(2).medal}</div>
                     <div className="w-16 h-16 rounded-full bg-gray-700 border-2 border-gray-400 flex items-center justify-center text-xl font-bold text-white shadow-lg overflow-hidden wood-texture">
-                      {topThree[1].playername.charAt(0).toUpperCase()}
+                      {(topThree[1].customDisplayName || topThree[1].displayName || topThree[1].playername || '?').charAt(0).toUpperCase()}
                     </div>
                     <div className="text-center">
-                      <div className="text-white font-bold text-xs truncate max-w-[80px]">
-                        {topThree[1].playername}
+                      <div className="text-white font-bold text-xs truncate max-w-[80px] flex items-center justify-center gap-0.5">
+                        {topThree[1].customDisplayName || topThree[1].displayName || topThree[1].playername}
+                        {topThree[1].isGuest && (
+                          <span className="text-[8px] text-gray-500" title="Guest Account">🎭</span>
+                        )}
                       </div>
                       <div className="text-gray-400 text-[10px] font-mono leading-tight">
                         {topThree[1].wins}{" "}
@@ -146,11 +149,14 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                       {getRankStyle(1).medal}
                     </div>
                     <div className="w-20 h-20 rounded-full bg-yellow-600 border-4 border-yellow-400 flex items-center justify-center text-3xl font-black text-white shadow-[0_0_20px_rgba(234,179,8,0.3)] overflow-hidden wood-texture">
-                      {topThree[0].playername.charAt(0).toUpperCase()}
+                      {(topThree[0].customDisplayName || topThree[0].displayName || topThree[0].playername || '?').charAt(0).toUpperCase()}
                     </div>
                     <div className="text-center">
-                      <div className="text-yellow-400 font-black text-sm truncate max-w-[100px] uppercase tracking-tighter">
-                        {topThree[0].playername}
+                      <div className="text-yellow-400 font-black text-sm truncate max-w-[100px] uppercase tracking-tighter flex items-center justify-center gap-1">
+                        {topThree[0].customDisplayName || topThree[0].displayName || topThree[0].playername}
+                        {topThree[0].isGuest && (
+                          <span className="text-[10px] text-yellow-400/60" title="Guest Account">🎭</span>
+                        )}
                       </div>
                       <div className="text-yellow-400/70 text-[10px] font-mono font-bold leading-tight">
                         {topThree[0].wins}{" "}
@@ -173,11 +179,14 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                   <div className="flex flex-col items-center gap-2 group">
                     <div className="text-2xl mb-1">{getRankStyle(3).medal}</div>
                     <div className="w-14 h-14 rounded-full bg-amber-900 border-2 border-amber-600 flex items-center justify-center text-lg font-bold text-white shadow-lg overflow-hidden wood-texture">
-                      {topThree[2].playername.charAt(0).toUpperCase()}
+                      {(topThree[2].customDisplayName || topThree[2].displayName || topThree[2].playername || '?').charAt(0).toUpperCase()}
                     </div>
                     <div className="text-center">
-                      <div className="text-white font-bold text-xs truncate max-w-[70px]">
-                        {topThree[2].playername}
+                      <div className="text-white font-bold text-xs truncate max-w-[70px] flex items-center justify-center gap-0.5">
+                        {topThree[2].customDisplayName || topThree[2].displayName || topThree[2].playername}
+                        {topThree[2].isGuest && (
+                          <span className="text-[8px] text-gray-500" title="Guest Account">🎭</span>
+                        )}
                       </div>
                       <div className="text-gray-400 text-[10px] font-mono leading-tight">
                         {topThree[2].wins}{" "}
@@ -205,7 +214,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                   const style = getRankStyle(idx + 4);
                   return (
                     <div
-                      key={entry.playername}
+                      key={entry.displayName || entry.playername || entry.userId}
                       className="flex items-center justify-between bg-gray-800/40 p-3 rounded-2xl border border-gray-700/50 hover:bg-gray-800/80 transition-all hover:translate-x-1 group"
                     >
                       <div className="flex items-center gap-4">
@@ -215,8 +224,11 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                           {idx + 4}
                         </span>
                         <div>
-                          <div className="text-white font-bold text-sm group-hover:text-blue-400 transition-colors">
-                            {entry.playername}
+                          <div className="text-white font-bold text-sm group-hover:text-blue-400 transition-colors flex items-center gap-1">
+                            {entry.customDisplayName || entry.displayName || entry.playername}
+                            {entry.isGuest && (
+                              <span className="text-[10px] px-1.5 py-0.5 bg-gray-700/50 rounded text-gray-400 font-normal" title="Guest Account">Guest</span>
+                            )}
                           </div>
                           <div className="text-gray-500 text-[10px] font-mono">
                             {entry.totalMatches}{" "}

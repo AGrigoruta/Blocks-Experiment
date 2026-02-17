@@ -118,7 +118,7 @@ function App() {
   // Socket Hook
   const socket = useSocket({
     myName,
-    authToken: user?.id ? localStorage.getItem('auth_token') : null,
+    authToken: user?.id ? localStorage.getItem("auth_token") : null,
     userId: user?.id || null,
     onGameStart: (data) => {
       setIsInLobby(false);
@@ -656,6 +656,16 @@ function App() {
     });
   };
 
+  // Update myName to use authenticated user's name
+  useEffect(() => {
+    if (user) {
+      const userName = user.customDisplayName || user.displayName;
+      if (myName !== userName) {
+        setMyName(userName);
+      }
+    }
+  }, [user, myName]);
+
   // Show loading screen while checking authentication
   if (authLoading) {
     return (
@@ -671,15 +681,9 @@ function App() {
   }
 
   // Use authenticated user's display name (with discriminator for display, without for backend compatibility)
-  const displayName = `${user.displayName}#${user.discriminator}`;
-  const userName = user.displayName; // Keep display name without discriminator for socket events
-  
-  // Update myName to use authenticated user's name
-  useEffect(() => {
-    if (user && myName !== userName) {
-      setMyName(userName);
-    }
-  }, [user, myName, userName, setMyName]);
+  const effectiveDisplayName = user.customDisplayName || user.displayName;
+  const displayName = `${effectiveDisplayName}#${user.discriminator}`;
+  const userName = effectiveDisplayName; // Keep display name without discriminator for socket events
 
   // Render lobby
   if (isInLobby) {
@@ -722,8 +726,6 @@ function App() {
         )}
         {showAISetup && (
           <AIGameSetup
-            myName={myName}
-            setMyName={setMyName}
             aiPlayer={aiPlayer}
             setAIPlayer={setAIPlayer}
             aiDifficulty={aiDifficulty}

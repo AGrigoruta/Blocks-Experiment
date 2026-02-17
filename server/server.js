@@ -7,7 +7,10 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import passport from "./utils/passport.js";
 import authRoutes from "./routes/auth.js";
-import { socketAuthenticate } from "./middleware/auth.js";
+import {
+  socketAuthenticate,
+  optionalSocketAuthenticate,
+} from "./middleware/auth.js";
 import {
   saveMatch,
   getAllMatches,
@@ -28,33 +31,38 @@ const app = express();
 const httpServer = createServer(app);
 
 // Security middleware
-app.use(helmet({
-  crossOriginResourcePolicy: { policy: "cross-origin" },
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'"],
-      connectSrc: ["'self'", CORS_ORIGIN],
-      imgSrc: ["'self'", "data:"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      objectSrc: ["'none'"],
-      frameAncestors: ["'none'"],
-      baseUri: ["'self'"]
-    }
-  }
-}));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        connectSrc: ["'self'", CORS_ORIGIN],
+        imgSrc: ["'self'", "data:"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        objectSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+        baseUri: ["'self'"],
+      },
+    },
+  }),
+);
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(cookieParser());
 
 // CORS middleware for Express
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', CORS_ORIGIN);
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  
-  if (req.method === 'OPTIONS') {
+  res.header("Access-Control-Allow-Origin", CORS_ORIGIN);
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Origin, X-Requested-With, Content-Type, Accept, Authorization",
+  );
+  res.header("Access-Control-Allow-Credentials", "true");
+
+  if (req.method === "OPTIONS") {
     return res.sendStatus(200);
   }
   next();
@@ -64,23 +72,23 @@ app.use((req, res, next) => {
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // Limit each IP to 100 requests per windowMs
-  message: 'Too many requests from this IP, please try again later.'
+  message: "Too many requests from this IP, please try again later.",
 });
-app.use('/auth', limiter);
+app.use("/auth", limiter);
 
 // Initialize Passport
 app.use(passport.initialize());
 
 // Routes
-app.use('/auth', authRoutes);
+app.use("/auth", authRoutes);
 
 // Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+app.get("/health", (req, res) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
 // Leaderboard endpoint (kept for compatibility)
-app.get('/leaderboard', async (req, res) => {
+app.get("/leaderboard", async (req, res) => {
   try {
     const leaderboard = await getLeaderboard(10);
     res.json({ leaderboard });
@@ -90,7 +98,7 @@ app.get('/leaderboard', async (req, res) => {
 });
 
 // Migration endpoint (for admin use - should be protected in production)
-app.post('/admin/migrate-users', async (req, res) => {
+app.post("/admin/migrate-users", async (req, res) => {
   try {
     const result = await migrateExistingPlayersToGuests();
     res.json(result);
@@ -108,9 +116,8 @@ const io = new Server(httpServer, {
   },
 });
 
-// Socket.io authentication middleware - OPTIONAL for now to maintain backward compatibility
-// Uncomment this line to require authentication for all socket connections
-// io.use(socketAuthenticate);
+// Socket.io authentication middleware - optional to support both authenticated and guest users
+io.use(optionalSocketAuthenticate);
 
 console.log(`Game Server running on port ${PORT}`);
 
@@ -868,6 +875,6 @@ function broadcastRoomList() {
 }
 
 // Start server
-httpServer.listen(PORT, '0.0.0.0', () => {
+httpServer.listen(PORT, "0.0.0.0", () => {
   console.log(`HTTP and WebSocket server listening on port ${PORT}`);
 });

@@ -1,5 +1,5 @@
-import { verifyToken, extractToken } from '../utils/jwt.js';
-import { getUserById } from '../db.js';
+import { verifyToken, extractToken } from "../utils/jwt.js";
+import { getUserById } from "../db.js";
 
 /**
  * Middleware to verify JWT token and attach user to request
@@ -12,23 +12,23 @@ export async function authenticate(req, res, next) {
     const token = extractToken(req);
 
     if (!token) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return res.status(401).json({ error: "Authentication required" });
     }
 
     const decoded = verifyToken(token);
-    
+
     // Fetch fresh user data from database
     const user = await getUserById(decoded.userId);
 
     if (!user) {
-      return res.status(401).json({ error: 'User not found' });
+      return res.status(401).json({ error: "User not found" });
     }
 
     // Attach user to request
     req.user = user;
     next();
   } catch (error) {
-    return res.status(401).json({ error: 'Invalid or expired token' });
+    return res.status(401).json({ error: "Invalid or expired token" });
   }
 }
 
@@ -43,16 +43,16 @@ export async function optionalAuthenticate(req, res, next) {
     if (token) {
       const decoded = verifyToken(token);
       const user = await getUserById(decoded.userId);
-      
+
       if (user) {
         req.user = user;
       }
     }
   } catch (error) {
     // Silently fail for optional auth
-    console.log('Optional auth failed:', error.message);
+    console.log("Optional auth failed:", error.message);
   }
-  
+
   next();
 }
 
@@ -66,14 +66,14 @@ export async function socketAuthenticate(socket, next) {
     const token = socket.handshake.auth.token;
 
     if (!token) {
-      return next(new Error('Authentication required'));
+      return next(new Error("Authentication required"));
     }
 
     const decoded = verifyToken(token);
     const user = await getUserById(decoded.userId);
 
     if (!user) {
-      return next(new Error('User not found'));
+      return next(new Error("User not found"));
     }
 
     // Attach user info to socket
@@ -85,6 +85,37 @@ export async function socketAuthenticate(socket, next) {
 
     next();
   } catch (error) {
-    next(new Error('Invalid or expired token'));
+    next(new Error("Invalid or expired token"));
   }
+}
+
+/**
+ * Optional Socket.io authentication middleware
+ * Sets user info if token is present, but doesn't fail if not (allows guests)
+ * @param {Object} socket - Socket.io socket
+ * @param {Function} next - Next middleware function
+ */
+export async function optionalSocketAuthenticate(socket, next) {
+  try {
+    const token = socket.handshake.auth.token;
+
+    if (token) {
+      const decoded = verifyToken(token);
+      const user = await getUserById(decoded.userId);
+
+      if (user) {
+        // Attach user info to socket
+        socket.userId = user.id;
+        socket.displayName = user.display_name;
+        socket.discriminator = user.discriminator;
+        socket.isGuest = user.is_guest;
+        socket.user = user;
+      }
+    }
+  } catch (error) {
+    // Silently fail for optional auth - guests can still connect
+    console.log("Optional socket auth failed:", error.message);
+  }
+
+  next();
 }
