@@ -44,7 +44,14 @@ export interface PlayerStats {
 }
 
 export interface LeaderboardEntry {
-  playername: string;
+  userId?: number;
+  displayName?: string;
+  discriminator?: string;
+  avatarUrl?: string;
+  oauthProvider?: string;
+  customDisplayName?: string;
+  isGuest?: boolean;
+  playername: string; // Keep for backward compatibility
   totalMatches: number;
   wins: number;
   draws: number;
@@ -79,6 +86,28 @@ export interface CustomEmoji {
   isImage?: boolean;
   createdAt: string;
 }
+
+// --- Authentication Types ---
+
+export interface User {
+  id: number;
+  displayName: string;
+  discriminator: string;
+  email?: string;
+  avatarUrl?: string;
+  isGuest: boolean;
+  provider: 'google' | 'github' | 'guest';
+  customDisplayName?: string;
+}
+
+export interface AuthState {
+  user: User | null;
+  token: string | null;
+  loading: boolean;
+  error: string | null;
+}
+
+export type AuthProvider = 'google' | 'github' | 'guest';
 
 // --- Network Types ---
 

@@ -7,6 +7,8 @@ import { AIGameSetup } from "@/components/AIGameSetup";
 import { MainMenu } from "@/components/MainMenu";
 import { GameView } from "@/components/GameView";
 import { BothPlayersStatsModal } from "@/components/BothPlayersStatsModal";
+import { LoginPage } from "@/components/LoginPage";
+import { useAuth } from "@/hooks/useAuth";
 import { useSocket } from "@/hooks/useSocket";
 import { useGameState } from "@/hooks/useGameState";
 import { getBestMove } from "@/utils/aiPlayer";
@@ -39,6 +41,8 @@ const SERVER_URL =
   (import.meta as any).env?.VITE_SERVER_URL || "http://localhost:3000";
 
 function App() {
+  const { user, loading: authLoading } = useAuth();
+
   // UI State
   const [isInLobby, setIsInLobby] = useState(true);
   const [showLocalSetup, setShowLocalSetup] = useState(false);
@@ -114,6 +118,8 @@ function App() {
   // Socket Hook
   const socket = useSocket({
     myName,
+    authToken: user?.id ? localStorage.getItem("auth_token") : null,
+    userId: user?.id || null,
     onGameStart: (data) => {
       setIsInLobby(false);
       setWhiteName(data.whiteName || "White");
@@ -650,6 +656,35 @@ function App() {
     });
   };
 
+  // Update myName to use authenticated user's name
+  useEffect(() => {
+    if (user) {
+      const userName = user.customDisplayName || user.displayName;
+      if (myName !== userName) {
+        setMyName(userName);
+      }
+    }
+  }, [user, myName]);
+
+  // Show loading screen while checking authentication
+  if (authLoading) {
+    return (
+      <div className="w-full h-[100dvh] bg-gray-900 flex items-center justify-center">
+        <div className="text-white text-xl">Loading...</div>
+      </div>
+    );
+  }
+
+  // Show login page if not authenticated
+  if (!user) {
+    return <LoginPage />;
+  }
+
+  // Use authenticated user's display name (with discriminator for display, without for backend compatibility)
+  const effectiveDisplayName = user.customDisplayName || user.displayName;
+  const displayName = `${effectiveDisplayName}#${user.discriminator}`;
+  const userName = effectiveDisplayName; // Keep display name without discriminator for socket events
+
   // Render lobby
   if (isInLobby) {
     return (
@@ -691,8 +726,6 @@ function App() {
         )}
         {showAISetup && (
           <AIGameSetup
-            myName={myName}
-            setMyName={setMyName}
             aiPlayer={aiPlayer}
             setAIPlayer={setAIPlayer}
             aiDifficulty={aiDifficulty}

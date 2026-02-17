@@ -113,13 +113,19 @@ export const Chat: React.FC<ChatProps> = ({
             >
               <div
                 className={`${isReaction ? (isImageReaction ? "" : "text-4xl") : "max-w-[85%] px-3 py-2 rounded-xl text-sm break-words shadow-sm"} ${
-                  isReaction ? "" : isMe
-                    ? "bg-blue-600/90 text-white rounded-tr-none"
-                    : "bg-gray-700/80 text-gray-200 rounded-tl-none"
+                  isReaction
+                    ? ""
+                    : isMe
+                      ? "bg-blue-600/90 text-white rounded-tr-none"
+                      : "bg-gray-700/80 text-gray-200 rounded-tl-none"
                 }`}
               >
                 {isImageReaction ? (
-                  <img src={msg.text} alt="Custom emoji reaction" className="w-12 h-12 object-contain" />
+                  <img
+                    src={msg.text}
+                    alt="Custom emoji reaction"
+                    className="w-12 h-12 object-contain"
+                  />
                 ) : (
                   msg.text
                 )}
@@ -141,73 +147,79 @@ export const Chat: React.FC<ChatProps> = ({
         >
           {/* Reaction Picker */}
           {showReactions && (
-          <div className="p-2 bg-gray-900/50 border-b border-gray-700">
-            <div className="flex gap-2 justify-center flex-wrap mb-2">
-              {reactions.map((reaction, index) => {
-                const isImage = isImageEmoji(reaction);
-                return (
-                  <button
-                    key={index}
-                    type="button"
-                    onClick={() => handleReactionClick(reaction)}
-                    className={`${isImage ? "w-10 h-10" : "text-2xl"} hover:scale-125 transition-transform p-1 hover:bg-gray-700/50 rounded flex items-center justify-center`}
-                    aria-label={`Send ${REACTION_LABELS[reaction] || "emoji"} reaction`}
-                  >
-                    {isImage ? (
-                      <img src={reaction} alt="Custom emoji" className="w-full h-full object-contain" />
-                    ) : (
-                      reaction
-                    )}
-                  </button>
-                );
-              })}
+            <div className="p-2 bg-gray-900/50 border-b border-gray-700">
+              <div className="flex gap-2 justify-center flex-wrap mb-2">
+                {reactions.map((reaction, index) => {
+                  const isImage = isImageEmoji(reaction);
+                  return (
+                    <button
+                      key={index}
+                      type="button"
+                      onClick={() => handleReactionClick(reaction)}
+                      className={`${isImage ? "w-10 h-10" : "text-2xl"} hover:scale-125 transition-transform p-1 hover:bg-gray-700/50 rounded flex items-center justify-center`}
+                      aria-label={`Send ${REACTION_LABELS[reaction] || "emoji"} reaction`}
+                    >
+                      {isImage ? (
+                        <img
+                          src={reaction}
+                          alt="Custom emoji"
+                          className="w-full h-full object-contain"
+                        />
+                      ) : (
+                        reaction
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              <button
+                type="button"
+                onClick={onOpenEmojiUpload}
+                className="w-full text-blue-400 hover:text-blue-300 text-xs font-medium py-1.5 hover:bg-gray-700/50 rounded transition"
+              >
+                + Add Custom Emoji
+              </button>
             </div>
+          )}
+          <div className="p-3 flex gap-2">
             <button
               type="button"
-              onClick={onOpenEmojiUpload}
-              className="w-full text-blue-400 hover:text-blue-300 text-xs font-medium py-1.5 hover:bg-gray-700/50 rounded transition"
+              onClick={() => setShowReactions(!showReactions)}
+              className="bg-gray-900/50 hover:bg-gray-700 text-white p-2 rounded-lg transition"
+              title="Reactions"
+              aria-label="Open reaction picker"
             >
-              + Add Custom Emoji
+              <span className="text-xl">😊</span>
+            </button>
+            <input
+              type="text"
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              placeholder="Type..."
+              className="flex-1 bg-gray-900/50 border border-gray-600 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 placeholder-gray-600"
+              onKeyDown={(e) => e.stopPropagation()}
+            />
+            <button
+              type="submit"
+              className="bg-blue-600 hover:bg-blue-500 text-white p-2 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={!inputText.trim()}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-5 w-5"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+              >
+                <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
+              </svg>
             </button>
           </div>
-        )}
-        <div className="p-3 flex gap-2">
-          <button
-            type="button"
-            onClick={() => setShowReactions(!showReactions)}
-            className="bg-gray-900/50 hover:bg-gray-700 text-white p-2 rounded-lg transition"
-            title="Reactions"
-            aria-label="Open reaction picker"
-          >
-            <span className="text-xl">😊</span>
-          </button>
-          <input
-            type="text"
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            placeholder="Type..."
-            className="flex-1 bg-gray-900/50 border border-gray-600 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 placeholder-gray-600"
-            onKeyDown={(e) => e.stopPropagation()}
-          />
-          <button
-            type="submit"
-            className="bg-blue-600 hover:bg-blue-500 text-white p-2 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={!inputText.trim()}
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-5 w-5"
-              viewBox="0 0 20 20"
-              fill="currentColor"
-            >
-              <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
-            </svg>
-          </button>
-        </div>
-      </form>
+        </form>
       ) : (
         <div className="border-t border-gray-700 bg-gray-800/30 rounded-b-2xl p-3 text-center">
-          <span className="text-xs text-gray-500 italic">👁️ Spectator Mode - Read Only</span>
+          <span className="text-xs text-gray-500 italic">
+            👁️ Spectator Mode - Read Only
+          </span>
         </div>
       )}
     </div>
