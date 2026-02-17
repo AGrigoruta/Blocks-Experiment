@@ -56,20 +56,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Initialize auth state on mount
   useEffect(() => {
     const initAuth = async () => {
-      // Check URL for OAuth callback
+      // Listen for OAuth messages from popup
+      const handleOAuthMessage = async (event: MessageEvent) => {
+        // Verify origin for security
+        const expectedOrigin = new URL(SERVER_URL).origin;
+        if (event.origin !== expectedOrigin) {
+          return;
+        }
+
+        if (event.data?.type === 'oauth-success' && event.data?.token) {
+          const token = event.data.token;
+          storeToken(token);
+          
+          const user = await verifyToken(token);
+          setState({ user, token, loading: false, error: null });
+        }
+      };
+
+      window.addEventListener('message', handleOAuthMessage);
+
+      // Check URL for OAuth failure (fallback for errors)
       const params = new URLSearchParams(window.location.search);
       const authStatus = params.get('auth');
-      const tokenFromUrl = params.get('token');
 
-      if (authStatus === 'success' && tokenFromUrl) {
-        // OAuth success - store token and clear URL
-        storeToken(tokenFromUrl);
-        window.history.replaceState({}, document.title, window.location.pathname);
-        
-        const user = await verifyToken(tokenFromUrl);
-        setState({ user, token: tokenFromUrl, loading: false, error: null });
-        return;
-      } else if (authStatus === 'failed') {
+      if (authStatus === 'failed') {
         // OAuth failed
         const error = params.get('error') || 'Authentication failed';
         setState({ user: null, token: null, loading: false, error });
@@ -91,6 +101,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         setState({ user: null, token: null, loading: false, error: null });
       }
+
+      // Cleanup
+      return () => {
+        window.removeEventListener('message', handleOAuthMessage);
+      };
     };
 
     initAuth();
@@ -103,20 +118,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const left = window.screen.width / 2 - width / 2;
     const top = window.screen.height / 2 - height / 2;
 
-    const popup = window.open(
+    window.open(
       `${SERVER_URL}/auth/${provider}`,
       'oauth',
       `width=${width},height=${height},left=${left},top=${top}`
     );
-
-    // Poll for popup close or OAuth callback
-    const pollTimer = setInterval(() => {
-      if (popup && popup.closed) {
-        clearInterval(pollTimer);
-        // User closed popup without completing auth
-        console.log('OAuth popup closed');
-      }
-    }, 500);
+    
+    // The popup will close automatically and send the token via postMessage
+    // No need to poll - the message event listener in useEffect handles it
   }, []);
 
   // Guest login

@@ -22,7 +22,7 @@ pool
     oauth_id VARCHAR(255),
     email VARCHAR(255),
     display_name VARCHAR(100) NOT NULL,
-    discriminator VARCHAR(10),
+    discriminator VARCHAR(10) NOT NULL,
     avatar_url TEXT,
     is_guest BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -406,57 +406,82 @@ export async function createUser(userData) {
     }
   }
   
-  // Generate discriminator for display name uniqueness
-  const discriminator = await generateDiscriminator(displayName);
-  
-  const query = `
-    INSERT INTO users (
-      oauth_provider,
-      oauth_id,
-      email,
-      display_name,
-      discriminator,
-      avatar_url,
-      is_guest,
-      last_login_at
-    )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
-    RETURNING *
-  `;
-  
-  const values = [
-    oauthProvider,
-    oauthId,
-    email,
-    displayName,
-    discriminator,
-    avatarUrl || null,
-    isGuest || false
-  ];
-  
-  const result = await pool.query(query, values);
-  return result.rows[0];
+  // Try to create user with retry logic for race conditions
+  const maxRetries = 5;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      // Generate discriminator for display name uniqueness
+      const discriminator = await generateDiscriminator(displayName);
+      
+      const query = `
+        INSERT INTO users (
+          oauth_provider,
+          oauth_id,
+          email,
+          display_name,
+          discriminator,
+          avatar_url,
+          is_guest,
+          last_login_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
+        RETURNING *
+      `;
+      
+      const values = [
+        oauthProvider,
+        oauthId,
+        email,
+        displayName,
+        discriminator,
+        avatarUrl || null,
+        isGuest || false
+      ];
+      
+      const result = await pool.query(query, values);
+      return result.rows[0];
+    } catch (error) {
+      // If unique constraint violation on (display_name, discriminator), retry
+      if (error.code === '23505' && error.constraint === 'users_display_name_discriminator_key') {
+        if (attempt === maxRetries - 1) {
+          throw new Error('Failed to generate unique discriminator after multiple attempts');
+        }
+        // Retry with a small delay
+        await new Promise(resolve => setTimeout(resolve, 100 * (attempt + 1)));
+        continue;
+      }
+      // For other errors, throw immediately
+      throw error;
+    }
+  }
 }
 
 /**
  * Generate a unique discriminator for a display name (Discord-style)
+ * Uses retry logic to handle race conditions when multiple users register simultaneously
  * @param {string} displayName - The display name
+ * @param {number} maxRetries - Maximum number of retries (default: 5)
  * @returns {string} A 4-digit discriminator (e.g., "0001")
  */
-async function generateDiscriminator(displayName) {
-  // Get all existing discriminators for this display name
-  const result = await pool.query(
-    'SELECT discriminator FROM users WHERE display_name = $1 ORDER BY discriminator',
-    [displayName]
-  );
-  
-  const existingDiscriminators = new Set(result.rows.map(row => row.discriminator));
-  
-  // Find the first available discriminator from 0001 to 9999
-  for (let i = 1; i <= 9999; i++) {
-    const discriminator = i.toString().padStart(4, '0');
-    if (!existingDiscriminators.has(discriminator)) {
-      return discriminator;
+async function generateDiscriminator(displayName, maxRetries = 5) {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    // Get all existing discriminators for this display name
+    const result = await pool.query(
+      'SELECT discriminator FROM users WHERE display_name = $1 ORDER BY discriminator',
+      [displayName]
+    );
+    
+    const existingDiscriminators = new Set(result.rows.map(row => row.discriminator));
+    
+    // Find the first available discriminator from 0001 to 9999
+    for (let i = 1; i <= 9999; i++) {
+      const discriminator = i.toString().padStart(4, '0');
+      if (!existingDiscriminators.has(discriminator)) {
+        // Try to use this discriminator
+        // The UNIQUE constraint on (display_name, discriminator) will prevent duplicates
+        // If another process grabbed it, we'll get a constraint violation and retry
+        return discriminator;
+      }
     }
   }
   

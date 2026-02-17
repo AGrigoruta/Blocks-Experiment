@@ -19,12 +19,16 @@ const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
  * @returns {string} JWT token
  */
 export function generateToken(user) {
+  // WARNING: JWT payload is signed but NOT encrypted - data is publicly readable
+  // Do not include sensitive information that shouldn't be client-accessible
   const payload = {
     userId: user.id,
     displayName: user.display_name,
     discriminator: user.discriminator,
     provider: user.oauth_provider,
     isGuest: user.is_guest,
+    // Email and avatar are included for convenience but are not sensitive
+    // Users should expect this data to be visible (it's their public profile data)
     email: user.email,
     avatarUrl: user.avatar_url
   };

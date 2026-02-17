@@ -24,9 +24,24 @@ router.get('/google/callback',
     try {
       const token = generateToken(req.user);
       
-      // Redirect to client with token
-      // The client will extract the token from URL and store it
-      res.redirect(`${CLIENT_URL}?auth=success&token=${token}`);
+      // Send token via postMessage to parent window (more secure than URL params)
+      // This prevents token exposure in browser history and server logs
+      res.send(`
+        <!DOCTYPE html>
+        <html>
+          <head><title>Authentication Successful</title></head>
+          <body>
+            <script>
+              window.opener.postMessage(
+                { type: 'oauth-success', token: '${token}' },
+                '${CLIENT_URL}'
+              );
+              window.close();
+            </script>
+            <p>Authentication successful. This window will close automatically...</p>
+          </body>
+        </html>
+      `);
     } catch (error) {
       console.error('Google auth callback error:', error);
       res.redirect(`${CLIENT_URL}?auth=failed&error=${encodeURIComponent(error.message)}`);
@@ -51,8 +66,24 @@ router.get('/github/callback',
     try {
       const token = generateToken(req.user);
       
-      // Redirect to client with token
-      res.redirect(`${CLIENT_URL}?auth=success&token=${token}`);
+      // Send token via postMessage to parent window (more secure than URL params)
+      // This prevents token exposure in browser history and server logs
+      res.send(`
+        <!DOCTYPE html>
+        <html>
+          <head><title>Authentication Successful</title></head>
+          <body>
+            <script>
+              window.opener.postMessage(
+                { type: 'oauth-success', token: '${token}' },
+                '${CLIENT_URL}'
+              );
+              window.close();
+            </script>
+            <p>Authentication successful. This window will close automatically...</p>
+          </body>
+        </html>
+      `);
     } catch (error) {
       console.error('GitHub auth callback error:', error);
       res.redirect(`${CLIENT_URL}?auth=failed&error=${encodeURIComponent(error.message)}`);
