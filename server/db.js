@@ -585,6 +585,55 @@ export async function updateDisplayName(userId, newDisplayName) {
 }
 
 /**
+ * Link existing matches to guest users
+ * This updates white_user_id and black_user_id based on display names
+ * @returns {Object} Link statistics
+ */
+export async function linkMatchesToGuests() {
+  try {
+    // Get all guest users
+    const guestUsers = await pool.query(
+      'SELECT id, display_name FROM users WHERE is_guest = true'
+    );
+    
+    let whiteLinked = 0;
+    let blackLinked = 0;
+    
+    for (const user of guestUsers.rows) {
+      // Link matches where whiteName matches this guest's display_name
+      const whiteResult = await pool.query(`
+        UPDATE matches
+        SET white_user_id = $1
+        WHERE whiteName = $2 AND white_user_id IS NULL
+      `, [user.id, user.display_name]);
+      whiteLinked += whiteResult.rowCount;
+      
+      // Link matches where blackName matches this guest's display_name
+      const blackResult = await pool.query(`
+        UPDATE matches
+        SET black_user_id = $1
+        WHERE blackName = $2 AND black_user_id IS NULL
+      `, [user.id, user.display_name]);
+      blackLinked += blackResult.rowCount;
+    }
+    
+    return {
+      success: true,
+      whiteLinked,
+      blackLinked,
+      totalLinked: whiteLinked + blackLinked,
+      guestUsers: guestUsers.rows.length
+    };
+  } catch (err) {
+    console.error('Error in linkMatchesToGuests:', err);
+    return {
+      success: false,
+      error: err.message
+    };
+  }
+}
+
+/**
  * Get user stats by user ID (replaces getPlayerStats for authenticated users)
  * @param {number} userId - User ID
  * @returns {Object} Statistics object
