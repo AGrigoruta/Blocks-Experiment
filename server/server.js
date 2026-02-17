@@ -20,7 +20,6 @@ import {
   getLeaderboard,
   saveCustomEmoji,
   getAllCustomEmojis,
-  migrateExistingPlayersToGuests,
 } from "./db.js";
 
 const PORT = process.env.PORT || 3000;
@@ -92,16 +91,6 @@ app.get("/leaderboard", async (req, res) => {
   try {
     const leaderboard = await getLeaderboard(10);
     res.json({ leaderboard });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Migration endpoint (for admin use - should be protected in production)
-app.post("/admin/migrate-users", async (req, res) => {
-  try {
-    const result = await migrateExistingPlayersToGuests();
-    res.json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
