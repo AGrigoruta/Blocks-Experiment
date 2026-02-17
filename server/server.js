@@ -20,7 +20,6 @@ import {
   getLeaderboard,
   saveCustomEmoji,
   getAllCustomEmojis,
-  linkMatchesToGuests,
 } from "./db.js";
 
 const PORT = process.env.PORT || 3000;
@@ -92,16 +91,6 @@ app.get("/leaderboard", async (req, res) => {
   try {
     const leaderboard = await getLeaderboard(10);
     res.json({ leaderboard });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Admin endpoint to link existing matches to guest users
-app.post("/admin/link-matches", async (req, res) => {
-  try {
-    const result = await linkMatchesToGuests();
-    res.json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
