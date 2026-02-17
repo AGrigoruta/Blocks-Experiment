@@ -679,7 +679,7 @@ function App() {
     if (user && myName !== userName) {
       setMyName(userName);
     }
-  }, [user, myName, userName]);
+  }, [user, myName, userName, setMyName]);
 
   // Render lobby
   if (isInLobby) {
