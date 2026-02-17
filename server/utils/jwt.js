@@ -1,6 +1,16 @@
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'default_secret_change_in_production';
+const DEFAULT_JWT_SECRET = 'default_secret_change_in_production';
+const RAW_JWT_SECRET = process.env.JWT_SECRET;
+
+// In production, require a secure, explicitly configured JWT secret
+if (process.env.NODE_ENV === 'production') {
+  if (!RAW_JWT_SECRET || RAW_JWT_SECRET === DEFAULT_JWT_SECRET) {
+    throw new Error('JWT_SECRET environment variable must be set to a secure value in production.');
+  }
+}
+
+const JWT_SECRET = RAW_JWT_SECRET || DEFAULT_JWT_SECRET;
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
 /**
