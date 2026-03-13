@@ -161,7 +161,69 @@ const UPLOAD_RATE_WINDOW = 60000; // 1 minute in milliseconds
 // Matchmaking queue: Map<socketId, { socket, playerName, userId, eloRating, joinedAt, timeSettings }>
 const matchmakingQueue = new Map();
 const ELO_BASE_RANGE = 200;
-const ELO_EXPAND_PER_MINUTE = 100; // Expand allowed ELO difference by 100 each minute of waiting
+const ELO_EXPAND_PER_MINUTE = 150; // Expand allowed ELO difference by 150 each minute of waiting
+const MATCHMAKING_POLL_MS = 15000;  // Re-evaluate the queue every 15 seconds
+const MATCHMAKING_TIMEOUT_MS = 10 * 60 * 1000; // Auto-cancel after 10 minutes
+let matchmakingIntervalId = null;
+
+/**
+ * Start the periodic matchmaking poll if not already running.
+ * The interval calls attemptMatchmaking and sends live status updates
+ * to every waiting player (wait time + current allowed ELO range).
+ * It also ejects players who have been waiting longer than
+ * MATCHMAKING_TIMEOUT_MS.
+ */
+function startMatchmakingInterval() {
+  if (matchmakingIntervalId !== null) return; // already running
+
+  matchmakingIntervalId = setInterval(() => {
+    if (matchmakingQueue.size === 0) {
+      stopMatchmakingInterval();
+      return;
+    }
+
+    const now = Date.now();
+
+    // Eject timed-out players first, then attempt matching
+    for (const [socketId, entry] of matchmakingQueue) {
+      const waitMs = now - entry.joinedAt;
+
+      if (waitMs >= MATCHMAKING_TIMEOUT_MS) {
+        matchmakingQueue.delete(socketId);
+        entry.socket.emit("matchmaking_status", { status: "timeout" });
+        console.log(
+          `Matchmaking timeout for ${entry.playerName} after ${Math.round(waitMs / 1000)}s`,
+        );
+        continue;
+      }
+
+      // Send live progress update so the client can show wait time and range
+      const waitSeconds = Math.round(waitMs / 1000);
+      const waitMinutes = waitMs / 60000;
+      const eloRange = ELO_BASE_RANGE + Math.floor(waitMinutes) * ELO_EXPAND_PER_MINUTE;
+      entry.socket.emit("matchmaking_status", {
+        status: "searching",
+        queueSize: matchmakingQueue.size,
+        waitSeconds,
+        eloRange,
+      });
+    }
+
+    attemptMatchmaking();
+
+    // Stop interval if queue drained after matching
+    if (matchmakingQueue.size === 0) {
+      stopMatchmakingInterval();
+    }
+  }, MATCHMAKING_POLL_MS);
+}
+
+function stopMatchmakingInterval() {
+  if (matchmakingIntervalId !== null) {
+    clearInterval(matchmakingIntervalId);
+    matchmakingIntervalId = null;
+  }
+}
 
 io.on("connection", (socket) => {
   console.log("Client connected:", socket.id);
@@ -601,9 +663,16 @@ io.on("connection", (socket) => {
     });
 
     console.log(`${playerName} (ELO: ${eloRating}) joined matchmaking queue. Queue size: ${matchmakingQueue.size}`);
-    socket.emit("matchmaking_status", { status: "searching", queueSize: matchmakingQueue.size });
+    socket.emit("matchmaking_status", {
+      status: "searching",
+      queueSize: matchmakingQueue.size,
+      waitSeconds: 0,
+      eloRange: ELO_BASE_RANGE,
+    });
 
+    // Try to match immediately, then start the periodic poll
     attemptMatchmaking();
+    startMatchmakingInterval();
   });
 
   socket.on("leave_matchmaking", () => {
@@ -611,6 +680,9 @@ io.on("connection", (socket) => {
       console.log(`Socket ${socket.id} left matchmaking queue`);
     }
     socket.emit("matchmaking_status", { status: "idle" });
+    if (matchmakingQueue.size === 0) {
+      stopMatchmakingInterval();
+    }
   });
 
   socket.on("upload_custom_emoji", (data) => {
@@ -824,6 +896,9 @@ io.on("connection", (socket) => {
     uploadRateLimits.delete(socket.id);
     // Remove from matchmaking queue if present
     matchmakingQueue.delete(socket.id);
+    if (matchmakingQueue.size === 0) {
+      stopMatchmakingInterval();
+    }
 
     rooms.forEach((room, roomId) => {
       if (room.white === socket.id || room.black === socket.id) {

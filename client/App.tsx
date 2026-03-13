@@ -114,6 +114,8 @@ function App() {
 
   // Matchmaking
   const [isMatchmaking, setIsMatchmaking] = useState(false);
+  const [matchmakingWaitSeconds, setMatchmakingWaitSeconds] = useState(0);
+  const [matchmakingEloRange, setMatchmakingEloRange] = useState(200);
 
   const hasShownStatsRef = useRef(false);
   const isChatOpenRef = useRef(isChatOpen);
@@ -265,8 +267,17 @@ function App() {
     onMatchmakingStatus: (data) => {
       if (data.status === "searching") {
         setIsMatchmaking(true);
+        if (data.waitSeconds !== undefined) setMatchmakingWaitSeconds(data.waitSeconds);
+        if (data.eloRange !== undefined) setMatchmakingEloRange(data.eloRange);
       } else if (data.status === "idle") {
         setIsMatchmaking(false);
+        setMatchmakingWaitSeconds(0);
+        setMatchmakingEloRange(200);
+      } else if (data.status === "timeout") {
+        setIsMatchmaking(false);
+        setMatchmakingWaitSeconds(0);
+        setMatchmakingEloRange(200);
+        alert("No opponent found within 10 minutes. Please try again or use the lobby to create a game.");
       }
     },
     onMatchmakingMatched: (data) => {
@@ -645,6 +656,8 @@ function App() {
   const handleCancelMatchmaking = () => {
     socket.leaveMatchmaking();
     setIsMatchmaking(false);
+    setMatchmakingWaitSeconds(0);
+    setMatchmakingEloRange(200);
   };
 
   const handleQuit = () => {
@@ -830,6 +843,8 @@ function App() {
           }}
           setGameMode={setGameMode}
           isMatchmaking={isMatchmaking}
+          matchmakingWaitSeconds={matchmakingWaitSeconds}
+          matchmakingEloRange={matchmakingEloRange}
           onFindMatch={handleFindMatch}
           onCancelMatchmaking={handleCancelMatchmaking}
         />

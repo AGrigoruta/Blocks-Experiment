@@ -267,7 +267,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                     const style = getRankStyle(idx + 4);
                     const entryKey = entry.userId
                       ? `user-${entry.userId}`
-                      : `name-${getDisplayName(entry) ?? ""}-${entry.discriminator ?? ""}`;
+                      : `name-${getDisplayName(entry) ?? ""}-${entry.discriminator ?? ""}-${idx}`;
                     return (
                       <div
                         key={entryKey}

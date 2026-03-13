@@ -27,7 +27,7 @@ interface UseSocketOptions {
   onRoomCreated: (data: { roomId: string; roomCode: string }) => void;
   onRoomList: (rooms: RoomInfo[]) => void;
   onError: (message: string) => void;
-  onMatchmakingStatus?: (data: { status: string; queueSize?: number }) => void;
+  onMatchmakingStatus?: (data: { status: string; queueSize?: number; waitSeconds?: number; eloRange?: number }) => void;
   onMatchmakingMatched?: (data: { roomId: string; playerColor: Player }) => void;
 }
 
@@ -123,11 +123,11 @@ export const useSocket = (options: UseSocketOptions) => {
       setConnectionStatus("idle");
     });
 
-    socket.on("matchmaking_status", (data: { status: string; queueSize?: number }) => {
+    socket.on("matchmaking_status", (data: { status: string; queueSize?: number; waitSeconds?: number; eloRange?: number }) => {
       if (data.status === "searching") {
         setConnectionStatus("waiting");
         setNetworkRole(null);
-      } else if (data.status === "idle") {
+      } else if (data.status === "idle" || data.status === "timeout") {
         setConnectionStatus("idle");
       }
       optionsRef.current.onMatchmakingStatus?.(data);

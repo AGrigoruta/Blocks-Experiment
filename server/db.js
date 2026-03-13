@@ -348,10 +348,10 @@ export async function getLeaderboard(limit = 10) {
 /**
  * Calculate new ELO rating for a player
  * Uses the standard ELO formula with K=32
- * @param {number} playerRating - Current player ELO rating
+ * @param {number} playerRating - Current player ELO rating (used as base for calculation)
  * @param {number} opponentRating - Current opponent ELO rating
  * @param {number} result - 1 for win, 0 for loss, 0.5 for draw
- * @returns {number} New ELO rating (minimum 100)
+ * @returns {number} New ELO rating, clamped to a minimum of 100
  */
 export function calculateElo(playerRating, opponentRating, result) {
   const K = 32;

@@ -39,6 +39,8 @@ interface MainMenuProps {
   onCopyCode: () => void;
   setGameMode: (mode: "local" | "online" | "ai") => void;
   isMatchmaking?: boolean;
+  matchmakingWaitSeconds?: number;
+  matchmakingEloRange?: number;
   onFindMatch?: () => void;
   onCancelMatchmaking?: () => void;
 }
@@ -77,6 +79,8 @@ export const MainMenu = ({
   onCopyCode,
   setGameMode,
   isMatchmaking,
+  matchmakingWaitSeconds = 0,
+  matchmakingEloRange = 200,
   onFindMatch,
   onCancelMatchmaking,
 }: MainMenuProps) => {
@@ -341,7 +345,7 @@ export const MainMenu = ({
           ) : (
             <div className="text-center py-10 bg-gray-900/80 rounded-2xl border border-blue-500/30 animate-in fade-in zoom-in duration-500 shadow-[0_0_40px_rgba(59,130,246,0.1)]">
               {isMatchmaking ? (
-                <div className="space-y-6">
+                <div className="space-y-5">
                   <div className="relative mx-auto w-14 h-14">
                     <div className="w-14 h-14 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
                     <div className="absolute inset-0 flex items-center justify-center text-lg">⚡</div>
@@ -352,6 +356,28 @@ export const MainMenu = ({
                     </p>
                     <p className="text-gray-400 text-xs">
                       Searching for a worthy opponent...
+                    </p>
+                  </div>
+                  {/* Live search stats */}
+                  <div className="mx-6 bg-gray-800/60 rounded-xl p-3 space-y-2 text-[10px] font-mono">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-500 uppercase tracking-widest">Wait time</span>
+                      <span className="text-white font-bold">
+                        {Math.floor(matchmakingWaitSeconds / 60)}:{String(matchmakingWaitSeconds % 60).padStart(2, "0")}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-500 uppercase tracking-widest">ELO range</span>
+                      <span className="text-emerald-400 font-bold">±{matchmakingEloRange}</span>
+                    </div>
+                    <div className="w-full h-1 bg-gray-700 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-emerald-500 rounded-full transition-all duration-1000"
+                        style={{ width: `${Math.min(100, (matchmakingEloRange / 1200) * 100)}%` }}
+                      ></div>
+                    </div>
+                    <p className="text-gray-600 text-center leading-tight">
+                      Range widens every minute until a match is found
                     </p>
                   </div>
                   <button
