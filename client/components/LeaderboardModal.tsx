@@ -265,9 +265,12 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                   </h4>
                   {others.map((entry, idx) => {
                     const style = getRankStyle(idx + 4);
+                    const entryKey = entry.userId
+                      ? `user-${entry.userId}`
+                      : `name-${getDisplayName(entry) ?? ""}-${entry.discriminator ?? ""}`;
                     return (
                       <div
-                        key={getDisplayName(entry) || entry.userId || idx}
+                        key={entryKey}
                         className="flex items-center justify-between bg-gray-800/40 p-3 rounded-2xl border border-gray-700/50 hover:bg-gray-800/80 transition-all hover:translate-x-1 group"
                       >
                         <div className="flex items-center gap-4">

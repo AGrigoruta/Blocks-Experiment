@@ -353,7 +353,7 @@ export async function getLeaderboard(limit = 10) {
  * @param {number} result - 1 for win, 0 for loss, 0.5 for draw
  * @returns {number} New ELO rating (minimum 100)
  */
-function calculateElo(playerRating, opponentRating, result) {
+export function calculateElo(playerRating, opponentRating, result) {
   const K = 32;
   const expectedScore = 1 / (1 + Math.pow(10, (opponentRating - playerRating) / 400));
   const newRating = Math.round(playerRating + K * (result - expectedScore));
