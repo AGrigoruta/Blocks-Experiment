@@ -51,6 +51,7 @@ export interface LeaderboardEntry {
   oauthProvider?: string;
   customDisplayName?: string;
   isGuest?: boolean;
+  eloRating?: number;
   playername: string; // Keep for backward compatibility
   totalMatches: number;
   wins: number;

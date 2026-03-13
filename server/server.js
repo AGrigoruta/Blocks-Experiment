@@ -18,6 +18,9 @@ import {
   getPlayerStats,
   getUserStats,
   getLeaderboard,
+  getEloLeaderboard,
+  updateEloRatings,
+  getUserById,
   saveCustomEmoji,
   getAllCustomEmojis,
 } from "./db.js";
@@ -96,6 +99,16 @@ app.get("/leaderboard", async (req, res) => {
   }
 });
 
+// ELO leaderboard endpoint
+app.get("/leaderboard/elo", async (req, res) => {
+  try {
+    const leaderboard = await getEloLeaderboard(10);
+    res.json({ leaderboard });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Socket.io setup
 const io = new Server(httpServer, {
   cors: {
@@ -144,6 +157,11 @@ const rooms = new Map();
 const uploadRateLimits = new Map();
 const UPLOAD_RATE_LIMIT = 5; // Max uploads per window
 const UPLOAD_RATE_WINDOW = 60000; // 1 minute in milliseconds
+
+// Matchmaking queue: Map<socketId, { socket, playerName, userId, eloRating, joinedAt, timeSettings }>
+const matchmakingQueue = new Map();
+const ELO_BASE_RANGE = 200;
+const ELO_EXPAND_PER_MINUTE = 100; // Expand allowed ELO difference by 100 each minute of waiting
 
 io.on("connection", (socket) => {
   console.log("Client connected:", socket.id);
@@ -390,6 +408,13 @@ io.on("connection", (socket) => {
           console.log(
             `Match saved. Winner: ${data.winner}. Time: ${matchTime}s, White blocks: ${room.whiteBlocks}, Black blocks: ${room.blackBlocks}`,
           );
+          // Update ELO ratings for authenticated players
+          if (room.whiteUserId && room.blackUserId) {
+            const eloUpdate = await updateEloRatings(room.whiteUserId, room.blackUserId, data.winner);
+            if (eloUpdate) {
+              console.log(`ELO updated: White ${eloUpdate.newWhiteRating}, Black ${eloUpdate.newBlackRating}`);
+            }
+          }
         } catch (error) {
           console.error("Error saving match on game end:", error);
         }
@@ -550,6 +575,42 @@ io.on("connection", (socket) => {
       .catch((error) => {
         socket.emit("player_stats", { stats: null, error: error.message });
       });
+  });
+
+  socket.on("join_matchmaking", async (data) => {
+    const { playerName, timeSettings } = data || {};
+
+    // Get ELO rating for authenticated users
+    let eloRating = 1200;
+    if (socket.userId) {
+      try {
+        const user = await getUserById(socket.userId);
+        eloRating = user?.elo_rating ?? 1200;
+      } catch (err) {
+        console.error("Error fetching ELO for matchmaking:", err);
+      }
+    }
+
+    matchmakingQueue.set(socket.id, {
+      socket,
+      playerName: playerName || "Player",
+      userId: socket.userId || null,
+      eloRating,
+      joinedAt: Date.now(),
+      timeSettings: timeSettings || { isTimed: true, initialTime: 300, increment: 5 },
+    });
+
+    console.log(`${playerName} (ELO: ${eloRating}) joined matchmaking queue. Queue size: ${matchmakingQueue.size}`);
+    socket.emit("matchmaking_status", { status: "searching", queueSize: matchmakingQueue.size });
+
+    attemptMatchmaking();
+  });
+
+  socket.on("leave_matchmaking", () => {
+    if (matchmakingQueue.delete(socket.id)) {
+      console.log(`Socket ${socket.id} left matchmaking queue`);
+    }
+    socket.emit("matchmaking_status", { status: "idle" });
   });
 
   socket.on("upload_custom_emoji", (data) => {
@@ -761,6 +822,8 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => {
     // Clean up rate limiting data
     uploadRateLimits.delete(socket.id);
+    // Remove from matchmaking queue if present
+    matchmakingQueue.delete(socket.id);
 
     rooms.forEach((room, roomId) => {
       if (room.white === socket.id || room.black === socket.id) {
@@ -821,6 +884,13 @@ async function handleDisconnect(socket, roomId) {
         console.log(
           `Match saved due to ${disconnectedPlayer} (${room[disconnectedPlayer + "Name"]}) disconnect. Winner: ${winner} (${room[winner + "Name"]}). Time: ${matchTime}s, White blocks: ${room.whiteBlocks}, Black blocks: ${room.blackBlocks}`,
         );
+        // Update ELO ratings for authenticated players
+        if (room.whiteUserId && room.blackUserId) {
+          const eloUpdate = await updateEloRatings(room.whiteUserId, room.blackUserId, winner);
+          if (eloUpdate) {
+            console.log(`ELO updated on disconnect: White ${eloUpdate.newWhiteRating}, Black ${eloUpdate.newBlackRating}`);
+          }
+        }
       } catch (error) {
         console.error("Error saving match on disconnect:", error);
       }
@@ -861,6 +931,91 @@ function broadcastRoomList() {
   }));
 
   io.emit("room_list", { rooms: roomList });
+}
+
+function attemptMatchmaking() {
+  const players = Array.from(matchmakingQueue.values());
+  if (players.length < 2) return;
+
+  const now = Date.now();
+
+  for (let i = 0; i < players.length; i++) {
+    for (let j = i + 1; j < players.length; j++) {
+      const a = players[i];
+      const b = players[j];
+
+      // Expand ELO range based on the longest waiting time
+      const waitMinutesA = (now - a.joinedAt) / 60000;
+      const waitMinutesB = (now - b.joinedAt) / 60000;
+      const maxWaitMinutes = Math.max(waitMinutesA, waitMinutesB);
+      const allowedRange = ELO_BASE_RANGE + Math.floor(maxWaitMinutes) * ELO_EXPAND_PER_MINUTE;
+      const eloDifference = Math.abs(a.eloRating - b.eloRating);
+
+      if (eloDifference <= allowedRange) {
+        // Match found — remove both from queue
+        matchmakingQueue.delete(a.socket.id);
+        matchmakingQueue.delete(b.socket.id);
+
+        const roomId = Math.random().toString(36).substr(2, 4).toUpperCase();
+        const timeSettings = a.timeSettings;
+
+        rooms.set(roomId, {
+          id: roomId,
+          isPrivate: false,
+          roomCode: null,
+          white: a.socket.id,
+          whiteName: a.playerName,
+          whiteUserId: a.userId,
+          black: b.socket.id,
+          blackName: b.playerName,
+          blackUserId: b.userId,
+          spectators: [],
+          whiteRematch: false,
+          blackRematch: false,
+          whiteScore: 0,
+          blackScore: 0,
+          lastWinner: null,
+          timeSettings,
+          createdAt: Date.now(),
+          gameStarted: false,
+          gameStartTime: null,
+          whiteBlocks: 0,
+          blackBlocks: 0,
+          disconnectMatchSaved: false,
+          blocks: [],
+          currentPlayer: "white",
+          whiteTime: timeSettings.isTimed ? timeSettings.initialTime : 999999,
+          blackTime: timeSettings.isTimed ? timeSettings.initialTime : 999999,
+        });
+
+        a.socket.join(roomId);
+        b.socket.join(roomId);
+
+        console.log(
+          `Matchmaking paired: ${a.playerName} (ELO: ${a.eloRating}) vs ${b.playerName} (ELO: ${b.eloRating}) in room ${roomId}`,
+        );
+
+        // Notify both players they were matched
+        a.socket.emit("matchmaking_matched", { roomId, playerColor: "white" });
+        b.socket.emit("matchmaking_matched", { roomId, playerColor: "black" });
+
+        // Send game_start to the room
+        io.to(roomId).emit("game_start", {
+          whiteId: a.socket.id,
+          blackId: b.socket.id,
+          whiteName: a.playerName,
+          blackName: b.playerName,
+          whiteStats: null,
+          blackStats: null,
+          timeSettings,
+          startingPlayer: "white",
+        });
+
+        broadcastRoomList();
+        return;
+      }
+    }
+  }
 }
 
 // Start server

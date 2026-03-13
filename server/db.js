@@ -55,6 +55,18 @@ pool
     `);
   })
   .then(() => {
+    // Migration: Add elo_rating column if it doesn't exist
+    return pool.query(`
+      DO $$ 
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                       WHERE table_name='users' AND column_name='elo_rating') THEN
+          ALTER TABLE users ADD COLUMN elo_rating INTEGER DEFAULT 1200;
+        END IF;
+      END $$;
+    `);
+  })
+  .then(() => {
     console.log("Users table migrations completed");
   })
   .catch((err) => {
@@ -327,6 +339,116 @@ export async function getLeaderboard(limit = 10) {
     FROM user_stats
     WHERE "totalMatches" > 0
     ORDER BY wins DESC, "winRate" DESC, "totalMatches" DESC
+    LIMIT $1
+  `;
+  const result = await pool.query(query, [limit]);
+  return result.rows;
+}
+
+/**
+ * Calculate new ELO rating for a player
+ * Uses the standard ELO formula with K=32
+ * @param {number} playerRating - Current player ELO rating
+ * @param {number} opponentRating - Current opponent ELO rating
+ * @param {number} result - 1 for win, 0 for loss, 0.5 for draw
+ * @returns {number} New ELO rating (minimum 100)
+ */
+function calculateElo(playerRating, opponentRating, result) {
+  const K = 32;
+  const expectedScore = 1 / (1 + Math.pow(10, (opponentRating - playerRating) / 400));
+  const newRating = Math.round(playerRating + K * (result - expectedScore));
+  return Math.max(100, newRating);
+}
+
+/**
+ * Update ELO ratings for both players after a match
+ * Only updates ratings when both players are authenticated users
+ * @param {number} whiteUserId - User ID of white player
+ * @param {number} blackUserId - User ID of black player
+ * @param {string} winner - 'white', 'black', or 'draw'
+ * @returns {Object|null} New ratings { newWhiteRating, newBlackRating } or null if not applicable
+ */
+export async function updateEloRatings(whiteUserId, blackUserId, winner) {
+  if (!whiteUserId || !blackUserId) return null;
+
+  const whiteResult = await pool.query('SELECT elo_rating FROM users WHERE id = $1', [whiteUserId]);
+  const blackResult = await pool.query('SELECT elo_rating FROM users WHERE id = $1', [blackUserId]);
+
+  if (!whiteResult.rows[0] || !blackResult.rows[0]) return null;
+
+  const whiteRating = whiteResult.rows[0].elo_rating ?? 1200;
+  const blackRating = blackResult.rows[0].elo_rating ?? 1200;
+
+  let whiteScore, blackScore;
+  if (winner === 'white') {
+    whiteScore = 1; blackScore = 0;
+  } else if (winner === 'black') {
+    whiteScore = 0; blackScore = 1;
+  } else {
+    whiteScore = 0.5; blackScore = 0.5;
+  }
+
+  const newWhiteRating = calculateElo(whiteRating, blackRating, whiteScore);
+  const newBlackRating = calculateElo(blackRating, whiteRating, blackScore);
+
+  await pool.query('UPDATE users SET elo_rating = $1 WHERE id = $2', [newWhiteRating, whiteUserId]);
+  await pool.query('UPDATE users SET elo_rating = $1 WHERE id = $2', [newBlackRating, blackUserId]);
+
+  return { newWhiteRating, newBlackRating };
+}
+
+/**
+ * Get ELO leaderboard with top players sorted by ELO rating
+ * @param {number} limit - Maximum number of players to return (default: 10)
+ * @returns {Array} Array of player objects with stats and ELO rating
+ */
+export async function getEloLeaderboard(limit = 10) {
+  const query = `
+    WITH user_stats AS (
+      SELECT 
+        u.id,
+        u.display_name,
+        u.discriminator,
+        u.avatar_url,
+        u.oauth_provider,
+        u.is_guest,
+        u.custom_display_name,
+        COALESCE(u.elo_rating, 1200) as elo_rating,
+        COUNT(m.id)::int as "totalMatches",
+        SUM(CASE 
+          WHEN m.winner = 'white' AND m.white_user_id = u.id THEN 1 
+          WHEN m.winner = 'black' AND m.black_user_id = u.id THEN 1 
+          ELSE 0 
+        END)::int as wins,
+        SUM(CASE WHEN m.winner = 'draw' THEN 1 ELSE 0 END)::int as draws,
+        SUM(CASE 
+          WHEN m.winner = 'white' AND m.black_user_id = u.id THEN 1 
+          WHEN m.winner = 'black' AND m.white_user_id = u.id THEN 1 
+          ELSE 0 
+        END)::int as losses
+      FROM users u
+      LEFT JOIN matches m ON (m.white_user_id = u.id OR m.black_user_id = u.id)
+      GROUP BY u.id, u.display_name, u.discriminator, u.avatar_url, u.oauth_provider, u.is_guest, u.custom_display_name, u.elo_rating
+    )
+    SELECT 
+      display_name as "displayName",
+      discriminator,
+      avatar_url as "avatarUrl",
+      oauth_provider as "oauthProvider",
+      custom_display_name as "customDisplayName",
+      is_guest as "isGuest",
+      elo_rating as "eloRating",
+      "totalMatches",
+      wins,
+      draws,
+      losses,
+      CASE 
+        WHEN "totalMatches" > 0 THEN ROUND(((wins::float / "totalMatches"::float) * 100)::numeric, 1)
+        ELSE 0 
+      END as "winRate"
+    FROM user_stats
+    WHERE "totalMatches" > 0
+    ORDER BY elo_rating DESC, wins DESC, "totalMatches" DESC
     LIMIT $1
   `;
   const result = await pool.query(query, [limit]);
