@@ -8,6 +8,7 @@ import { MainMenu } from "@/components/MainMenu";
 import { GameView } from "@/components/GameView";
 import { BothPlayersStatsModal } from "@/components/BothPlayersStatsModal";
 import { LoginPage } from "@/components/LoginPage";
+import { OfflineIndicator } from "@/components/OfflineIndicator";
 import { useAuth } from "@/hooks/useAuth";
 import { useSocket } from "@/hooks/useSocket";
 import { useGameState } from "@/hooks/useGameState";
@@ -925,6 +926,7 @@ function App() {
         onUpload={handleCustomEmojiUpload}
         serverError={uploadError}
       />
+      <OfflineIndicator />
     </>
   );
 }
