@@ -14,6 +14,7 @@ interface MainMenuProps {
   setShowLeaderboard: (show: boolean) => void;
   showLobby: boolean;
   leaderboard: LeaderboardEntry[];
+  eloLeaderboard?: LeaderboardEntry[];
   isLeaderboardLoading: boolean;
   rooms: RoomInfo[];
   isRoomsLoading: boolean;
@@ -37,6 +38,11 @@ interface MainMenuProps {
   onCancelHosting: () => void;
   onCopyCode: () => void;
   setGameMode: (mode: "local" | "online" | "ai") => void;
+  isMatchmaking?: boolean;
+  matchmakingWaitSeconds?: number;
+  matchmakingEloRange?: number;
+  onFindMatch?: () => void;
+  onCancelMatchmaking?: () => void;
 }
 
 export const MainMenu = ({
@@ -48,6 +54,7 @@ export const MainMenu = ({
   setShowLeaderboard,
   showLobby,
   leaderboard,
+  eloLeaderboard,
   isLeaderboardLoading,
   rooms,
   isRoomsLoading,
@@ -71,6 +78,11 @@ export const MainMenu = ({
   onCancelHosting,
   onCopyCode,
   setGameMode,
+  isMatchmaking,
+  matchmakingWaitSeconds = 0,
+  matchmakingEloRange = 200,
+  onFindMatch,
+  onCancelMatchmaking,
 }: MainMenuProps) => {
   return (
     <div className="w-full h-[100dvh] bg-gray-900 flex items-center justify-center p-4">
@@ -80,6 +92,7 @@ export const MainMenu = ({
         isOpen={showLeaderboard}
         onClose={() => setShowLeaderboard(false)}
         entries={leaderboard}
+        eloEntries={eloLeaderboard}
         isLoading={isLeaderboardLoading}
       />
 
@@ -305,10 +318,76 @@ export const MainMenu = ({
                 </svg>
                 VIEW LOBBY
               </button>
+
+              {onFindMatch && (
+                <button
+                  onClick={onFindMatch}
+                  className="w-full py-4 bg-gradient-to-r from-emerald-700 to-teal-700 hover:from-emerald-600 hover:to-teal-600 text-white font-black rounded-2xl transition shadow-xl flex items-center justify-center gap-3 border border-emerald-400/20"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-5 w-5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M13 10V3L4 14h7v7l9-11h-7z"
+                    />
+                  </svg>
+                  FIND MATCH (ELO)
+                </button>
+              )}
             </div>
           ) : (
             <div className="text-center py-10 bg-gray-900/80 rounded-2xl border border-blue-500/30 animate-in fade-in zoom-in duration-500 shadow-[0_0_40px_rgba(59,130,246,0.1)]">
-              {networkRole === "host" ? (
+              {isMatchmaking ? (
+                <div className="space-y-5">
+                  <div className="relative mx-auto w-14 h-14">
+                    <div className="w-14 h-14 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+                    <div className="absolute inset-0 flex items-center justify-center text-lg">⚡</div>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-emerald-400 text-[10px] font-black uppercase tracking-[0.2em]">
+                      Ranked Matchmaking
+                    </p>
+                    <p className="text-gray-400 text-xs">
+                      Searching for a worthy opponent...
+                    </p>
+                  </div>
+                  {/* Live search stats */}
+                  <div className="mx-6 bg-gray-800/60 rounded-xl p-3 space-y-2 text-[10px] font-mono">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-500 uppercase tracking-widest">Wait time</span>
+                      <span className="text-white font-bold">
+                        {Math.floor(matchmakingWaitSeconds / 60)}:{String(matchmakingWaitSeconds % 60).padStart(2, "0")}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-500 uppercase tracking-widest">ELO range</span>
+                      <span className="text-emerald-400 font-bold">±{matchmakingEloRange}</span>
+                    </div>
+                    <div className="w-full h-1 bg-gray-700 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-emerald-500 rounded-full transition-all duration-1000"
+                        style={{ width: `${Math.min(100, (matchmakingEloRange / 1200) * 100)}%` }}
+                      ></div>
+                    </div>
+                    <p className="text-gray-600 text-center leading-tight">
+                      Range widens every minute until a match is found
+                    </p>
+                  </div>
+                  <button
+                    onClick={onCancelMatchmaking}
+                    className="text-red-500 text-[10px] uppercase font-black hover:text-red-400 transition tracking-widest"
+                  >
+                    Cancel Search
+                  </button>
+                </div>
+              ) : networkRole === "host" ? (
                 <div className="space-y-6">
                   <div className="space-y-1">
                     <p className="text-blue-400 text-[10px] font-black uppercase tracking-[0.2em] flex items-center justify-center gap-2">

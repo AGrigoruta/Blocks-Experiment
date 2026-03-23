@@ -110,6 +110,12 @@ function App() {
   // Leaderboard
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [isLeaderboardLoading, setIsLeaderboardLoading] = useState(false);
+  const [eloLeaderboard, setEloLeaderboard] = useState<LeaderboardEntry[]>([]);
+
+  // Matchmaking
+  const [isMatchmaking, setIsMatchmaking] = useState(false);
+  const [matchmakingWaitSeconds, setMatchmakingWaitSeconds] = useState(0);
+  const [matchmakingEloRange, setMatchmakingEloRange] = useState(200);
 
   const hasShownStatsRef = useRef(false);
   const isChatOpenRef = useRef(isChatOpen);
@@ -257,6 +263,31 @@ function App() {
     onError: (message) => {
       alert(message);
       setIsInLobby(true);
+    },
+    onMatchmakingStatus: (data) => {
+      if (data.status === "searching") {
+        setIsMatchmaking(true);
+        if (data.waitSeconds !== undefined) setMatchmakingWaitSeconds(data.waitSeconds);
+        if (data.eloRange !== undefined) setMatchmakingEloRange(data.eloRange);
+      } else if (data.status === "idle") {
+        setIsMatchmaking(false);
+        setMatchmakingWaitSeconds(0);
+        setMatchmakingEloRange(200);
+      } else if (data.status === "timeout") {
+        setIsMatchmaking(false);
+        setMatchmakingWaitSeconds(0);
+        setMatchmakingEloRange(200);
+        alert("No opponent found within 10 minutes. Please try again or use the lobby to create a game.");
+      }
+    },
+    onMatchmakingMatched: (data) => {
+      setIsMatchmaking(false);
+      setGameMode("online");
+      if (data.playerColor === "black") {
+        setMyPlayer("black");
+      } else {
+        setMyPlayer("white");
+      }
     },
   });
 
@@ -465,11 +496,16 @@ function App() {
   // Fetch leaderboard
   const fetchLeaderboard = useCallback(() => {
     setIsLeaderboardLoading(true);
-    fetch(`${SERVER_URL}/leaderboard`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.leaderboard) {
-          setLeaderboard(data.leaderboard);
+    Promise.all([
+      fetch(`${SERVER_URL}/leaderboard`).then((res) => res.json()),
+      fetch(`${SERVER_URL}/leaderboard/elo`).then((res) => res.json()),
+    ])
+      .then(([winsData, eloData]) => {
+        if (winsData.leaderboard) {
+          setLeaderboard(winsData.leaderboard);
+        }
+        if (eloData.leaderboard) {
+          setEloLeaderboard(eloData.leaderboard);
         }
         setIsLeaderboardLoading(false);
       })
@@ -603,6 +639,27 @@ function App() {
     setIsCreatingPrivate(true);
   };
 
+  const handleFindMatch = () => {
+    if (!myName.trim()) {
+      alert("Please enter your name first");
+      return;
+    }
+    setGameMode("online");
+    setIsCreatingPrivate(false);
+    socket.joinMatchmaking({
+      isTimed,
+      initialTime: initialTimeSetting,
+      increment: incrementSetting,
+    });
+  };
+
+  const handleCancelMatchmaking = () => {
+    socket.leaveMatchmaking();
+    setIsMatchmaking(false);
+    setMatchmakingWaitSeconds(0);
+    setMatchmakingEloRange(200);
+  };
+
   const handleQuit = () => {
     socket.cancelHosting();
     setIsInLobby(true);
@@ -697,6 +754,7 @@ function App() {
           isOpen={showLeaderboard}
           onClose={() => setShowLeaderboard(false)}
           entries={leaderboard}
+          eloEntries={eloLeaderboard}
           isLoading={isLeaderboardLoading}
         />
         <LobbyModal
@@ -749,6 +807,7 @@ function App() {
           setShowLeaderboard={setShowLeaderboard}
           showLobby={showLobby}
           leaderboard={leaderboard}
+          eloLeaderboard={eloLeaderboard}
           isLeaderboardLoading={isLeaderboardLoading}
           rooms={rooms}
           isRoomsLoading={isRoomsLoading}
@@ -783,6 +842,11 @@ function App() {
             }
           }}
           setGameMode={setGameMode}
+          isMatchmaking={isMatchmaking}
+          matchmakingWaitSeconds={matchmakingWaitSeconds}
+          matchmakingEloRange={matchmakingEloRange}
+          onFindMatch={handleFindMatch}
+          onCancelMatchmaking={handleCancelMatchmaking}
         />
       </>
     );

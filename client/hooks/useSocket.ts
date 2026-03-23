@@ -27,6 +27,8 @@ interface UseSocketOptions {
   onRoomCreated: (data: { roomId: string; roomCode: string }) => void;
   onRoomList: (rooms: RoomInfo[]) => void;
   onError: (message: string) => void;
+  onMatchmakingStatus?: (data: { status: string; queueSize?: number; waitSeconds?: number; eloRange?: number }) => void;
+  onMatchmakingMatched?: (data: { roomId: string; playerColor: Player }) => void;
 }
 
 export const useSocket = (options: UseSocketOptions) => {
@@ -121,6 +123,21 @@ export const useSocket = (options: UseSocketOptions) => {
       setConnectionStatus("idle");
     });
 
+    socket.on("matchmaking_status", (data: { status: string; queueSize?: number; waitSeconds?: number; eloRange?: number }) => {
+      if (data.status === "searching") {
+        setConnectionStatus("waiting");
+        setNetworkRole(null);
+      } else if (data.status === "idle" || data.status === "timeout") {
+        setConnectionStatus("idle");
+      }
+      optionsRef.current.onMatchmakingStatus?.(data);
+    });
+
+    socket.on("matchmaking_matched", (data: { roomId: string; playerColor: Player }) => {
+      setRoomId(data.roomId);
+      optionsRef.current.onMatchmakingMatched?.(data);
+    });
+
     socketRef.current = socket;
     return socket;
   };
@@ -200,6 +217,28 @@ export const useSocket = (options: UseSocketOptions) => {
     }
   };
 
+  const joinMatchmaking = (timeSettings: { isTimed: boolean; initialTime: number; increment: number }) => {
+    if (!optionsRef.current.myName.trim()) {
+      alert("Please enter your name first");
+      return;
+    }
+    const socket = connectSocket();
+    if (socket) {
+      socket.emit("join_matchmaking", {
+        playerName: optionsRef.current.myName,
+        timeSettings,
+      });
+    }
+  };
+
+  const leaveMatchmaking = () => {
+    if (socketRef.current?.connected) {
+      socketRef.current.emit("leave_matchmaking");
+    }
+    setConnectionStatus("idle");
+    setNetworkRole(null);
+  };
+
   useEffect(() => {
     return () => {
       if (socketRef.current) {
@@ -223,5 +262,7 @@ export const useSocket = (options: UseSocketOptions) => {
     requestRematch,
     sendMessage,
     getRooms,
+    joinMatchmaking,
+    leaveMatchmaking,
   };
 };
