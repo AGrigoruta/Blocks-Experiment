@@ -12,6 +12,7 @@ import { OfflineIndicator } from "@/components/OfflineIndicator";
 import { useAuth } from "@/hooks/useAuth";
 import { useSocket } from "@/hooks/useSocket";
 import { useGameState } from "@/hooks/useGameState";
+import { useOfflineStatus } from "@/hooks/useOfflineStatus";
 import { getBestMove } from "@/utils/aiPlayer";
 import {
   hasValidMove,
@@ -43,6 +44,7 @@ const SERVER_URL =
 
 function App() {
   const { user, loading: authLoading } = useAuth();
+  const isOffline = useOfflineStatus();
 
   // UI State
   const [isInLobby, setIsInLobby] = useState(true);
@@ -848,6 +850,7 @@ function App() {
           matchmakingEloRange={matchmakingEloRange}
           onFindMatch={handleFindMatch}
           onCancelMatchmaking={handleCancelMatchmaking}
+          isOffline={isOffline}
         />
       </>
     );
