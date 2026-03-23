@@ -43,6 +43,7 @@ interface MainMenuProps {
   matchmakingEloRange?: number;
   onFindMatch?: () => void;
   onCancelMatchmaking?: () => void;
+  isOffline?: boolean;
 }
 
 export const MainMenu = ({
@@ -83,6 +84,7 @@ export const MainMenu = ({
   matchmakingEloRange = 200,
   onFindMatch,
   onCancelMatchmaking,
+  isOffline = false,
 }: MainMenuProps) => {
   return (
     <div className="w-full h-[100dvh] bg-gray-900 flex items-center justify-center p-4">
@@ -219,6 +221,58 @@ export const MainMenu = ({
             <div className="flex-grow border-t border-gray-700/50"></div>
           </div>
 
+          {isOffline ? (
+            <div className="space-y-3 opacity-60 pointer-events-none select-none">
+              <div className="bg-gray-700/40 text-gray-400 text-[10px] p-3 rounded-xl border border-gray-600/30 text-center uppercase font-bold tracking-widest">
+                <span aria-hidden="true">📡</span> No internet connection — online features unavailable
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  disabled
+                  className="py-4 bg-gray-700 text-gray-500 font-black rounded-2xl shadow-xl flex flex-col items-center justify-center gap-2 border border-gray-600/20 cursor-not-allowed"
+                >
+                  <span className="bg-gray-600/20 p-1.5 rounded-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                  </span>
+                  <span className="text-xs uppercase tracking-widest">Public Game</span>
+                </button>
+                <button
+                  disabled
+                  className="py-4 bg-gray-700 text-gray-500 font-black rounded-2xl shadow-xl flex flex-col items-center justify-center gap-2 border border-gray-600/20 cursor-not-allowed"
+                >
+                  <span className="bg-gray-600/20 p-1.5 rounded-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                  </span>
+                  <span className="text-xs uppercase tracking-widest">Private Game</span>
+                </button>
+              </div>
+              <button
+                disabled
+                className="w-full py-4 bg-gray-700 text-gray-500 font-black rounded-2xl shadow-xl flex items-center justify-center gap-3 border border-gray-600/20 cursor-not-allowed"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                </svg>
+                VIEW LOBBY
+              </button>
+              {onFindMatch && (
+                <button
+                  disabled
+                  className="w-full py-4 bg-gray-700 text-gray-500 font-black rounded-2xl shadow-xl flex items-center justify-center gap-3 border border-gray-600/20 cursor-not-allowed"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  FIND MATCH (ELO)
+                </button>
+              )}
+            </div>
+          ) : (
+            <>
           <div className="mb-2 flex justify-center">
             <UserProfile />
           </div>
@@ -452,6 +506,8 @@ export const MainMenu = ({
                 </div>
               )}
             </div>
+          )}
+            </>
           )}
         </div>
       </div>
