@@ -40,6 +40,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setState((prev) => ({ ...prev, token: null, user: null }));
   }, []);
 
+  // Cache user data locally for offline access
+  const cacheUser = useCallback((user: User) => {
+    localStorage.setItem("cached_user", JSON.stringify(user));
+  }, []);
+
   // Verify token and get user info
   const verifyToken = useCallback(
     async (token: string): Promise<User | null> => {
@@ -55,13 +60,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         const data = await response.json();
+        cacheUser(data.user);
         return data.user;
       } catch (error) {
+        // Network error (fetch TypeError): server unreachable — use cached user data
+        if (error instanceof TypeError) {
+          const raw = localStorage.getItem("cached_user");
+          if (raw) {
+            try {
+              return JSON.parse(raw);
+            } catch (parseErr) {
+              console.error("Failed to parse cached user data:", parseErr);
+            }
+          }
+        }
         console.error("Token verification error:", error);
         return null;
       }
     },
-    [],
+    [cacheUser],
   );
 
   // Initialize auth state on mount
@@ -255,6 +272,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Logout
   const logout = useCallback(() => {
     clearToken();
+    localStorage.removeItem("cached_user");
     setState({ user: null, token: null, loading: false, error: null });
   }, [clearToken]);
 
