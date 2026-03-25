@@ -20,6 +20,14 @@ interface AuthContextType extends AuthState {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const OFFLINE_GUEST_USER: User = {
+  id: 0,
+  displayName: "Guest",
+  discriminator: "0000",
+  isGuest: true,
+  provider: "guest",
+};
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthState>({
     user: null,
@@ -40,45 +48,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setState((prev) => ({ ...prev, token: null, user: null }));
   }, []);
 
-  // Cache user data locally for offline access
-  const cacheUser = useCallback((user: User) => {
-    localStorage.setItem("cached_user", JSON.stringify(user));
-  }, []);
-
   // Verify token and get user info
   const verifyToken = useCallback(
     async (token: string): Promise<User | null> => {
-      try {
-        const response = await fetch(`${SERVER_URL}/auth/verify`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+      const response = await fetch(`${SERVER_URL}/auth/verify`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
-        if (!response.ok) {
-          throw new Error("Token verification failed");
-        }
-
-        const data = await response.json();
-        cacheUser(data.user);
-        return data.user;
-      } catch (error) {
-        // Network error (fetch TypeError): server unreachable — use cached user data
-        if (error instanceof TypeError) {
-          const raw = localStorage.getItem("cached_user");
-          if (raw) {
-            try {
-              return JSON.parse(raw);
-            } catch (parseErr) {
-              console.error("Failed to parse cached user data:", parseErr);
-            }
-          }
-        }
-        console.error("Token verification error:", error);
-        return null;
+      if (!response.ok) {
+        throw new Error("Token verification failed");
       }
+
+      const data = await response.json();
+      return data.user;
     },
-    [cacheUser],
+    [],
   );
 
   // Initialize auth state on mount
@@ -95,16 +81,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const token = event.data.token;
         storeToken(token);
 
-        const user = await verifyToken(token);
-        if (user) {
-          setState({ user, token, loading: false, error: null });
-        } else {
-          setState({
-            user: null,
-            token: null,
-            loading: false,
-            error: "Authentication failed",
-          });
+        try {
+          const user = await verifyToken(token);
+          if (user) {
+            setState({ user, token, loading: false, error: null });
+          } else {
+            setState({ user: null, token: null, loading: false, error: "Authentication failed" });
+          }
+        } catch {
+          setState({ user: null, token: null, loading: false, error: "Authentication failed" });
         }
       }
     };
@@ -116,16 +101,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.removeItem("oauth_token_temp");
 
         storeToken(token);
-        const user = await verifyToken(token);
-        if (user) {
-          setState({ user, token, loading: false, error: null });
-        } else {
-          setState({
-            user: null,
-            token: null,
-            loading: false,
-            error: "Authentication failed",
-          });
+        try {
+          const user = await verifyToken(token);
+          if (user) {
+            setState({ user, token, loading: false, error: null });
+          } else {
+            setState({ user: null, token: null, loading: false, error: "Authentication failed" });
+          }
+        } catch {
+          setState({ user: null, token: null, loading: false, error: "Authentication failed" });
         }
       }
     };
@@ -135,6 +119,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Initialize auth state
     const initAuth = async () => {
+      // When offline, skip auth entirely and use an offline guest account
+      if (!navigator.onLine) {
+        setState({ user: OFFLINE_GUEST_USER, token: null, loading: false, error: null });
+        return;
+      }
+
       // Check if this is an OAuth callback (token in URL hash)
       const hash = window.location.hash;
       if (hash.includes("token=")) {
@@ -162,10 +152,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (tempToken) {
         localStorage.removeItem("oauth_token_temp");
         storeToken(tempToken);
-        const user = await verifyToken(tempToken);
-        if (user) {
-          setState({ user, token: tempToken, loading: false, error: null });
-          return;
+        try {
+          const user = await verifyToken(tempToken);
+          if (user) {
+            setState({ user, token: tempToken, loading: false, error: null });
+            return;
+          }
+        } catch {
+          // Verification failed, fall through to normal auth flow
         }
       }
 
@@ -188,13 +182,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Check for stored token
       const storedToken = localStorage.getItem("auth_token");
       if (storedToken) {
-        const user = await verifyToken(storedToken);
-        if (user) {
-          setState({ user, token: storedToken, loading: false, error: null });
-        } else {
-          // Token invalid, clear it
-          clearToken();
-          setState({ user: null, token: null, loading: false, error: null });
+        try {
+          const user = await verifyToken(storedToken);
+          if (user) {
+            setState({ user, token: storedToken, loading: false, error: null });
+          } else {
+            // Token invalid, clear it
+            clearToken();
+            setState({ user: null, token: null, loading: false, error: null });
+          }
+        } catch (error) {
+          if (error instanceof TypeError) {
+            // Network unreachable (auth server down or no connectivity)
+            setState({ user: OFFLINE_GUEST_USER, token: null, loading: false, error: null });
+          } else {
+            // Token invalid or other server error, clear it
+            clearToken();
+            setState({ user: null, token: null, loading: false, error: null });
+          }
         }
       } else {
         setState({ user: null, token: null, loading: false, error: null });
@@ -203,10 +208,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     initAuth();
 
+    // Re-run auth when connectivity is restored (debounced to avoid rapid re-triggers)
+    let onlineTimer: ReturnType<typeof setTimeout> | null = null;
+    const handleOnline = () => {
+      if (onlineTimer) clearTimeout(onlineTimer);
+      onlineTimer = setTimeout(initAuth, 500);
+    };
+    window.addEventListener("online", handleOnline);
+
     // Cleanup
     return () => {
       window.removeEventListener("message", handleOAuthMessage);
       window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("online", handleOnline);
+      if (onlineTimer) clearTimeout(onlineTimer);
     };
   }, [verifyToken, storeToken, clearToken]);
 
@@ -272,7 +287,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Logout
   const logout = useCallback(() => {
     clearToken();
-    localStorage.removeItem("cached_user");
     setState({ user: null, token: null, loading: false, error: null });
   }, [clearToken]);
 
@@ -280,17 +294,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refreshUser = useCallback(async () => {
     if (!state.token) return;
 
-    const user = await verifyToken(state.token);
-    if (user) {
-      setState((prev) => ({ ...prev, user }));
-    } else {
-      clearToken();
-      setState({
-        user: null,
-        token: null,
-        loading: false,
-        error: "Session expired",
-      });
+    try {
+      const user = await verifyToken(state.token);
+      if (user) {
+        setState((prev) => ({ ...prev, user }));
+      } else {
+        clearToken();
+        setState({
+          user: null,
+          token: null,
+          loading: false,
+          error: "Session expired",
+        });
+      }
+    } catch {
+      // Network error during refresh — keep current user in state
     }
   }, [state.token, verifyToken, clearToken]);
 
