@@ -1,18 +1,21 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useOfflineStatus } from "@/hooks/useOfflineStatus";
 
 export const OfflineIndicator: React.FC = () => {
   const isOffline = useOfflineStatus();
-  const [showBanner, setShowBanner] = useState(!navigator.onLine);
+  const [showBanner, setShowBanner] = useState(false);
+  const isFirstRender = useRef(true);
 
   useEffect(() => {
-    if (isOffline) {
-      setShowBanner(true);
-    } else {
-      // Keep banner visible briefly to confirm reconnection
-      const timer = setTimeout(() => setShowBanner(false), 3000);
-      return () => clearTimeout(timer);
+    // On initial render, only show if offline; skip the "Back online" flash on page load
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      if (!isOffline) return;
     }
+    // Show the banner briefly, then hide it — whether going offline or coming back online
+    setShowBanner(true);
+    const timer = setTimeout(() => setShowBanner(false), 3000);
+    return () => clearTimeout(timer);
   }, [isOffline]);
 
   if (!showBanner) return null;
