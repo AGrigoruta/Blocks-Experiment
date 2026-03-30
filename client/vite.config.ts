@@ -48,36 +48,7 @@ export default defineConfig(({ mode }) => {
         },
         workbox: {
           globPatterns: ["**/*.{js,css,html,ico,woff2}", "pwa-*.png"],
-          runtimeCaching: [
-            {
-              urlPattern: /^https:\/\/cdn\.tailwindcss\.com\/.*/i,
-              handler: "CacheFirst",
-              options: {
-                cacheName: "tailwind-cdn",
-                expiration: {
-                  maxEntries: 5,
-                  maxAgeSeconds: 60 * 60 * 24 * 30,
-                },
-                cacheableResponse: {
-                  statuses: [0, 200],
-                },
-              },
-            },
-            {
-              urlPattern: /^https:\/\/esm\.sh\/.*/i,
-              handler: "CacheFirst",
-              options: {
-                cacheName: "esm-sh-modules",
-                expiration: {
-                  maxEntries: 100,
-                  maxAgeSeconds: 60 * 60 * 24 * 30,
-                },
-                cacheableResponse: {
-                  statuses: [0, 200],
-                },
-              },
-            },
-          ],
+          navigateFallback: "/index.html",
         },
       }),
     ],
