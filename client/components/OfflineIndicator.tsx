@@ -11,11 +11,20 @@ export const OfflineIndicator: React.FC = () => {
     if (isFirstRender.current) {
       isFirstRender.current = false;
       if (!isOffline) return;
+      // Starting offline: show banner immediately and keep it visible
+      setShowBanner(true);
+      return;
     }
-    // Show the banner briefly, then hide it — whether going offline or coming back online
-    setShowBanner(true);
-    const timer = setTimeout(() => setShowBanner(false), 3000);
-    return () => clearTimeout(timer);
+
+    if (isOffline) {
+      // Going offline: show banner persistently until back online
+      setShowBanner(true);
+    } else {
+      // Coming back online: show banner briefly then hide
+      setShowBanner(true);
+      const timer = setTimeout(() => setShowBanner(false), 3000);
+      return () => clearTimeout(timer);
+    }
   }, [isOffline]);
 
   if (!showBanner) return null;

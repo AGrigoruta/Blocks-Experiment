@@ -49,6 +49,8 @@ export default defineConfig(({ mode }) => {
         workbox: {
           globPatterns: ["**/*.{js,css,html,ico,woff2}", "pwa-*.png"],
           navigateFallback: "/index.html",
+          clientsClaim: true,
+          skipWaiting: true,
         },
       }),
     ],
